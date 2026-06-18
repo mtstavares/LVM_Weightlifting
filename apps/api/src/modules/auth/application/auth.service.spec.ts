@@ -30,7 +30,10 @@ const user: AuthUser = {
   temporaryPasswordExpiresAt: null,
   temporaryPasswordUsedAt: null,
   failedLoginAttempts: 0,
-  lockedUntil: null
+  lockedUntil: null,
+  firstLoginAt: new Date('2026-01-01'),
+  lastLoginAt: new Date('2026-01-01'),
+  lastPasswordChangeAt: new Date('2026-01-01')
 };
 
 describe('AuthService', () => {
@@ -53,7 +56,8 @@ describe('AuthService', () => {
       setTemporaryPassword: jest.fn(),
       markTemporaryPasswordUsed: jest.fn(),
       recordFailedLogin: jest.fn(),
-      resetFailedLogin: jest.fn()
+      resetFailedLogin: jest.fn(),
+      recordSuccessfulLogin: jest.fn().mockResolvedValue(user)
     };
     codes = {
       replaceEmailVerificationCode: jest.fn(),
@@ -173,12 +177,14 @@ describe('AuthService', () => {
       EmailNotVerifiedError
     );
 
-    users.findByEmail.mockResolvedValue({
+    const temporaryUser = {
       ...user,
       mustChangePassword: true,
       temporaryPasswordExpiresAt: new Date('2030-01-01'),
       temporaryPasswordUsedAt: null
-    });
+    };
+    users.findByEmail.mockResolvedValue(temporaryUser);
+    users.recordSuccessfulLogin.mockResolvedValue(temporaryUser);
     await expect(service.login(user.email, 'Temp123!')).resolves.toMatchObject({
       user: { mustChangePassword: true }
     });

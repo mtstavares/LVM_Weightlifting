@@ -13,6 +13,8 @@ Construir uma plataforma web responsiva para treinadores e atletas de Levantamen
 
 - Autenticacao com JWT e refresh token.
 - Gestao de atletas.
+- Status calculado da conta do atleta e desativacao reversivel.
+- Auditoria legivel e tecnicamente rastreavel.
 - Planejamento de semanas, dias, blocos, series e complexes.
 - Publicacao com snapshot de cargas.
 - Recalculo manual de cargas.

@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AthletesModule } from './modules/athletes/athletes.module';
+import { AuditModule } from './modules/audit/audit.module';
 import { PrismaModule } from './shared/infrastructure/prisma/prisma.module';
 import { MailModule } from './shared/infrastructure/mail/mail.module';
 
@@ -24,6 +25,7 @@ import { MailModule } from './shared/infrastructure/mail/mail.module';
     MailModule,
     AuthModule,
     AthletesModule,
+    AuditModule,
     HealthModule
   ],
   providers: [

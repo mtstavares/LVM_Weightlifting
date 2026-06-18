@@ -48,6 +48,7 @@ export class PrismaUserRepository implements UserRepository {
         mustChangePassword: false,
         temporaryPasswordExpiresAt: null,
         temporaryPasswordUsedAt: null,
+        lastPasswordChangeAt: new Date(),
         failedLoginAttempts: 0,
         lockedUntil: null
       }
@@ -89,6 +90,18 @@ export class PrismaUserRepository implements UserRepository {
     await this.prisma.user.update({
       where: { id: userId },
       data: {
+        failedLoginAttempts: 0,
+        lockedUntil: null
+      }
+    });
+  }
+
+  recordSuccessfulLogin(userId: string, firstLogin: boolean): Promise<AuthUser> {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        lastLoginAt: new Date(),
+        firstLoginAt: firstLogin ? new Date() : undefined,
         failedLoginAttempts: 0,
         lockedUntil: null
       }

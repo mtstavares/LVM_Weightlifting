@@ -64,7 +64,8 @@ export class AuthController {
         input.email,
         input.password,
         input.passwordConfirmation,
-        request.ip
+        request.ip,
+        request.get('user-agent')
       );
     } catch (error) {
       if (error instanceof EmailAlreadyInUseError) {
@@ -87,7 +88,12 @@ export class AuthController {
   ) {
     try {
       return this.respondWithSession(
-        await this.auth.verifyEmail(input.email, input.code, request.ip),
+        await this.auth.verifyEmail(
+          input.email,
+          input.code,
+          request.ip,
+          request.get('user-agent')
+        ),
         response
       );
     } catch (error) {
@@ -102,7 +108,11 @@ export class AuthController {
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async resendVerification(@Body() input: EmailDto, @Req() request: Request) {
-    await this.auth.resendVerificationCode(input.email, request.ip);
+    await this.auth.resendVerificationCode(
+      input.email,
+      request.ip,
+      request.get('user-agent')
+    );
   }
 
   @Post('login')
@@ -117,7 +127,12 @@ export class AuthController {
   ) {
     try {
       return this.respondWithSession(
-        await this.auth.login(input.email, input.password, request.ip),
+        await this.auth.login(
+          input.email,
+          input.password,
+          request.ip,
+          request.get('user-agent')
+        ),
         response
       );
     } catch (error) {
@@ -128,7 +143,7 @@ export class AuthController {
         throw new UnauthorizedException('Email verification required.');
       }
       if (error instanceof AccountInactiveError) {
-        throw new ForbiddenException('Account is inactive.');
+        throw new ForbiddenException('Conta indisponivel. Entre em contato com seu treinador.');
       }
       if (error instanceof AccountLockedError) {
         throw new ForbiddenException('Account is temporarily locked.');
@@ -144,7 +159,7 @@ export class AuthController {
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async forgotPassword(@Body() input: EmailDto, @Req() request: Request) {
-    await this.auth.forgotPassword(input.email, request.ip);
+    await this.auth.forgotPassword(input.email, request.ip, request.get('user-agent'));
   }
 
   @Post('change-password')
@@ -162,7 +177,8 @@ export class AuthController {
           input.currentPassword,
           input.newPassword,
           input.passwordConfirmation,
-          request.ip
+          request.ip,
+          request.get('user-agent')
         ),
         response
       );

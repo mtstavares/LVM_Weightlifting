@@ -13,6 +13,9 @@ export type AuthUser = {
   temporaryPasswordUsedAt: Date | null;
   failedLoginAttempts: number;
   lockedUntil: Date | null;
+  firstLoginAt: Date | null;
+  lastLoginAt: Date | null;
+  lastPasswordChangeAt: Date | null;
 };
 
 export type SafeAuthUser = {

@@ -37,6 +37,13 @@
 
 - CRUD de atletas, desativacao logica e upload de foto.
 - Testes de CRUD completo.
+- Status: em andamento.
+- Concluido: cadastro, listagem, consulta protegida, alteracao de nome, busca e filtro por status.
+- Concluido: status calculado de convite, primeiro login, ativo e inativo.
+- Concluido: desativacao e reativacao sem exclusao de historico.
+- Concluido: reenvio de convite e bloqueio de acesso do atleta inativo.
+- Concluido: auditoria legivel com filtros por atleta, evento, periodo e resultado.
+- Pendente: upload de foto e finalizacao da tela de edicao cadastral.
 
 ## Sprint 4 - Planejamento de Treinos
 

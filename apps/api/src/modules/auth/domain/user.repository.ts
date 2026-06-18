@@ -12,4 +12,5 @@ export interface UserRepository {
   markTemporaryPasswordUsed(userId: string): Promise<AuthUser>;
   recordFailedLogin(userId: string, lockedUntil: Date | null): Promise<void>;
   resetFailedLogin(userId: string): Promise<void>;
+  recordSuccessfulLogin(userId: string, firstLogin: boolean): Promise<AuthUser>;
 }

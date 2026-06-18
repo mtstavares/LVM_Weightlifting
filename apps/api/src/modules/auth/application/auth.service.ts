@@ -53,7 +53,8 @@ export class AuthService {
     email: string,
     password: string,
     passwordConfirmation: string,
-    ipAddress?: string
+    ipAddress?: string,
+    userAgent?: string
   ): Promise<PendingVerificationResult> {
     if (password !== passwordConfirmation) {
       throw new PasswordMismatchError();
@@ -73,9 +74,13 @@ export class AuthService {
       event: 'TRAINER_REGISTERED',
       userId: user.id,
       email: user.email,
-      ipAddress
+      ipAddress,
+      userAgent,
+      actorUserId: user.id,
+      affectedUserId: user.id,
+      description: `Treinador ${user.fullName} criou sua conta.`
     });
-    await this.sendVerificationCode(user, ipAddress);
+    await this.sendVerificationCode(user, ipAddress, userAgent);
 
     return {
       email: user.email,
@@ -83,7 +88,12 @@ export class AuthService {
     };
   }
 
-  async verifyEmail(email: string, code: string, ipAddress?: string): Promise<AuthResult> {
+  async verifyEmail(
+    email: string,
+    code: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<AuthResult> {
     const user = await this.users.findByEmail(this.normalizeEmail(email));
     const accountCode = user
       ? await this.accountCodes.findActiveEmailVerificationCode(user.id)
@@ -95,13 +105,13 @@ export class AuthService {
       accountCode.expiresAt <= new Date() ||
       accountCode.attempts >= accountCode.maxAttempts
     ) {
-      await this.recordVerificationFailure(user, ipAddress);
+      await this.recordVerificationFailure(user, ipAddress, userAgent);
       throw new InvalidVerificationCodeError();
     }
 
     if (accountCode.codeHash !== this.tokenService.hash(code.trim())) {
       await this.accountCodes.incrementAttempts(accountCode.id);
-      await this.recordVerificationFailure(user, ipAddress);
+      await this.recordVerificationFailure(user, ipAddress, userAgent);
       throw new InvalidVerificationCodeError();
     }
 
@@ -111,25 +121,41 @@ export class AuthService {
       event: 'EMAIL_VERIFIED',
       userId: user.id,
       email: user.email,
-      ipAddress
+      ipAddress,
+      userAgent,
+      actorUserId: user.id,
+      affectedUserId: user.id,
+      description: `${user.fullName} confirmou o e-mail da conta.`
     });
     return this.createSession(verifiedUser);
   }
 
-  async resendVerificationCode(email: string, ipAddress?: string): Promise<void> {
+  async resendVerificationCode(email: string, ipAddress?: string, userAgent?: string): Promise<void> {
     const user = await this.users.findByEmail(this.normalizeEmail(email));
     if (!user || user.emailVerifiedAt) {
       return;
     }
-    await this.sendVerificationCode(user, ipAddress);
+    await this.sendVerificationCode(user, ipAddress, userAgent);
   }
 
-  async login(email: string, password: string, ipAddress?: string): Promise<AuthResult> {
+  async login(
+    email: string,
+    password: string,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<AuthResult> {
     const normalizedEmail = this.normalizeEmail(email);
     const user = await this.users.findByEmail(normalizedEmail);
 
     if (!user) {
-      await this.audit.record({ event: 'LOGIN_FAILED', email: normalizedEmail, ipAddress });
+      await this.audit.record({
+        event: 'LOGIN_FAILED',
+        email: normalizedEmail,
+        ipAddress,
+        userAgent,
+        result: 'FAILURE',
+        description: `Falha de login para o e-mail ${normalizedEmail}.`
+      });
       throw new InvalidCredentialsError();
     }
     if (user.lockedUntil && user.lockedUntil > new Date()) {
@@ -144,6 +170,11 @@ export class AuthService {
         userId: user.id,
         email: user.email,
         ipAddress,
+        userAgent,
+        actorUserId: user.id,
+        affectedUserId: user.id,
+        result: 'FAILURE',
+        description: `Falha de login para o e-mail ${user.email}.`,
         metadata: { attempts: nextAttempts, locked: Boolean(lockedUntil) }
       });
       throw new InvalidCredentialsError();
@@ -165,24 +196,44 @@ export class AuthService {
       await this.users.markTemporaryPasswordUsed(user.id);
     }
 
-    await this.users.resetFailedLogin(user.id);
+    const firstLogin = !user.firstLoginAt;
+    const loggedUser = await this.users.recordSuccessfulLogin(user.id, firstLogin);
     await this.audit.record({
       event: 'LOGIN_SUCCEEDED',
       userId: user.id,
+      actorUserId: user.id,
+      affectedUserId: user.id,
       email: user.email,
-      ipAddress
+      ipAddress,
+      userAgent,
+      description: `${user.fullName} realizou login com sucesso.`
     });
-    return this.createSession(user);
+    if (firstLogin && user.role === 'ATHLETE') {
+      await this.audit.record({
+        event: 'ATHLETE_FIRST_LOGIN',
+        userId: user.id,
+        actorUserId: user.id,
+        affectedUserId: user.id,
+        email: user.email,
+        ipAddress,
+        userAgent,
+        description: `Atleta ${user.fullName} realizou o primeiro login.`
+      });
+    }
+    return this.createSession(loggedUser);
   }
 
-  async forgotPassword(email: string, ipAddress?: string): Promise<void> {
+  async forgotPassword(email: string, ipAddress?: string, userAgent?: string): Promise<void> {
     const normalizedEmail = this.normalizeEmail(email);
     const user = await this.users.findByEmail(normalizedEmail);
     await this.audit.record({
       event: 'PASSWORD_RECOVERY_REQUESTED',
       userId: user?.id,
       email: normalizedEmail,
-      ipAddress
+      ipAddress,
+      userAgent,
+      affectedUserId: user?.id,
+      description: `Solicitacao de recuperacao de senha para ${normalizedEmail}.`
     });
 
     if (!user || !user.emailVerifiedAt || !user.isActive) {
@@ -197,7 +248,8 @@ export class AuthService {
     currentPassword: string,
     newPassword: string,
     passwordConfirmation: string,
-    ipAddress?: string
+    ipAddress?: string,
+    userAgent?: string
   ): Promise<AuthResult> {
     if (newPassword !== passwordConfirmation) {
       throw new PasswordMismatchError();
@@ -216,9 +268,25 @@ export class AuthService {
     await this.audit.record({
       event: 'PASSWORD_CHANGED',
       userId: user.id,
+      actorUserId: user.id,
+      affectedUserId: user.id,
       email: user.email,
-      ipAddress
+      ipAddress,
+      userAgent,
+      description: `${user.fullName} alterou a senha da conta.`
     });
+    if (user.role === 'ATHLETE' && user.mustChangePassword) {
+      await this.audit.record({
+        event: 'ATHLETE_TEMPORARY_PASSWORD_CHANGED',
+        userId: user.id,
+        actorUserId: user.id,
+        affectedUserId: user.id,
+        email: user.email,
+        ipAddress,
+        userAgent,
+        description: `Atleta ${user.fullName} substituiu a senha temporaria.`
+      });
+    }
     return this.createSession(updatedUser);
   }
 
@@ -288,7 +356,11 @@ export class AuthService {
     };
   }
 
-  private async sendVerificationCode(user: AuthUser, ipAddress?: string): Promise<void> {
+  private async sendVerificationCode(
+    user: AuthUser,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
     const code = randomInt(100000, 1_000_000).toString();
     await this.accountCodes.replaceEmailVerificationCode(
       user.id,
@@ -304,8 +376,12 @@ export class AuthService {
     await this.audit.record({
       event: 'EMAIL_VERIFICATION_SENT',
       userId: user.id,
+      actorUserId: user.id,
+      affectedUserId: user.id,
       email: user.email,
-      ipAddress
+      ipAddress,
+      userAgent,
+      description: `Codigo de confirmacao enviado para ${user.email}.`
     });
   }
 
@@ -331,12 +407,21 @@ export class AuthService {
     });
   }
 
-  private async recordVerificationFailure(user: AuthUser | null, ipAddress?: string): Promise<void> {
+  private async recordVerificationFailure(
+    user: AuthUser | null,
+    ipAddress?: string,
+    userAgent?: string
+  ): Promise<void> {
     await this.audit.record({
       event: 'EMAIL_VERIFICATION_FAILED',
       userId: user?.id,
+      actorUserId: user?.id,
+      affectedUserId: user?.id,
       email: user?.email,
-      ipAddress
+      ipAddress,
+      userAgent,
+      result: 'FAILURE',
+      description: `Falha na confirmacao de e-mail${user ? ` de ${user.fullName}` : ''}.`
     });
   }
 
