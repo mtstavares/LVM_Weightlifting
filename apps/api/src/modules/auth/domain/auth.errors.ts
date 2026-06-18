@@ -1,0 +1,10 @@
+export class InvalidCredentialsError extends Error {}
+export class EmailAlreadyInUseError extends Error {}
+export class InvalidRefreshTokenError extends Error {}
+export class EmailNotVerifiedError extends Error {}
+export class InvalidVerificationCodeError extends Error {}
+export class PasswordChangeRequiredError extends Error {}
+export class AccountInactiveError extends Error {}
+export class AccountLockedError extends Error {}
+export class PasswordMismatchError extends Error {}
+export class TemporaryPasswordExpiredError extends Error {}

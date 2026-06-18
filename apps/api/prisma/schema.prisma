@@ -1,0 +1,377 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  TRAINER @map("COACH")
+  ATHLETE
+}
+
+enum AccountCodeType {
+  EMAIL_VERIFICATION
+}
+
+enum AuthAuditEvent {
+  TRAINER_REGISTERED
+  EMAIL_VERIFICATION_SENT
+  EMAIL_VERIFIED
+  EMAIL_VERIFICATION_FAILED
+  LOGIN_SUCCEEDED
+  LOGIN_FAILED
+  PASSWORD_RECOVERY_REQUESTED
+  TEMPORARY_PASSWORD_SENT
+  PASSWORD_CHANGED
+  ATHLETE_CREATED
+  ACCESS_DENIED
+}
+
+enum TrainingWeekStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ExerciseCategory {
+  SNATCH
+  CLEAN
+  JERK
+  SQUAT
+  PULL
+  ACCESSORY
+}
+
+enum TrainingBlockType {
+  STANDARD
+  COMPLEX
+  STRENGTH
+  ACCESSORY
+}
+
+enum TargetPrExercise {
+  SNATCH
+  CLEAN
+  JERK
+  BACK_SQUAT
+  FRONT_SQUAT
+}
+
+model User {
+  id                      String    @id @default(uuid())
+  fullName                String    @default("") @map("full_name")
+  email                   String    @unique
+  passwordHash            String    @map("password_hash")
+  role                    UserRole
+  isActive                Boolean   @default(false) @map("is_active")
+  emailVerifiedAt         DateTime? @map("email_verified_at")
+  mustChangePassword      Boolean   @default(false) @map("must_change_password")
+  temporaryPasswordExpiresAt DateTime? @map("temporary_password_expires_at")
+  temporaryPasswordUsedAt DateTime? @map("temporary_password_used_at")
+  failedLoginAttempts     Int       @default(0) @map("failed_login_attempts")
+  lockedUntil             DateTime? @map("locked_until")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+
+  coachSettings CoachSettings?
+  coachAthletes  Athlete[]       @relation("CoachAthletes")
+  athleteProfile Athlete?        @relation("AthleteUser")
+  coachComments  CoachComment[]
+  refreshTokens  RefreshToken[]
+  accountCodes   AccountCode[]
+  auditLogs      AuthAuditLog[]
+
+  @@map("users")
+}
+
+model AccountCode {
+  id        String          @id @default(uuid())
+  userId    String          @map("user_id")
+  type      AccountCodeType
+  codeHash  String          @map("code_hash")
+  expiresAt DateTime        @map("expires_at")
+  usedAt    DateTime?       @map("used_at")
+  attempts  Int             @default(0)
+  maxAttempts Int           @default(5) @map("max_attempts")
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, usedAt])
+  @@map("account_codes")
+}
+
+model AuthAuditLog {
+  id        String         @id @default(uuid())
+  userId    String?        @map("user_id")
+  email     String?
+  event     AuthAuditEvent
+  ipAddress String?        @map("ip_address")
+  metadata  Json?
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([email, createdAt])
+  @@map("auth_audit_logs")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model CoachSettings {
+  id                String   @id @default(uuid())
+  coachId           String   @unique @map("coach_id")
+  roundingIncrement Decimal  @default(2.5) @map("rounding_increment") @db.Decimal(4, 1)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  coach User @relation(fields: [coachId], references: [id])
+
+  @@map("coach_settings")
+}
+
+model Athlete {
+  id             String    @id @default(uuid())
+  userId         String    @unique @map("user_id")
+  coachId        String    @map("coach_id")
+  firstName      String    @map("first_name")
+  lastName       String    @map("last_name")
+  profilePhoto   String?   @map("profile_photo")
+  birthDate      DateTime? @map("birth_date") @db.Date
+  weightCategory String?   @map("weight_category")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user               User                @relation("AthleteUser", fields: [userId], references: [id])
+  coach              User                @relation("CoachAthletes", fields: [coachId], references: [id])
+  trainingWeeks      TrainingWeek[]
+  workoutCompletions WorkoutCompletion[]
+  feedbacks          Feedback[]
+  uploadedVideos     UploadedVideo[]
+  personalRecords    PersonalRecord[]
+  fatigueLogs        FatigueLog[]
+
+  @@index([coachId])
+  @@map("athletes")
+}
+
+model TrainingWeek {
+  id         String             @id @default(uuid())
+  athleteId  String             @map("athlete_id")
+  weekNumber Int                @map("week_number")
+  startDate  DateTime           @map("start_date") @db.Date
+  endDate    DateTime           @map("end_date") @db.Date
+  status     TrainingWeekStatus @default(DRAFT)
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+
+  athlete Athlete       @relation(fields: [athleteId], references: [id])
+  days    TrainingDay[]
+
+  @@index([athleteId, status])
+  @@map("training_weeks")
+}
+
+model TrainingDay {
+  id             String   @id @default(uuid())
+  trainingWeekId String   @map("training_week_id")
+  weekday        Int
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  trainingWeek       TrainingWeek        @relation(fields: [trainingWeekId], references: [id])
+  blocks             TrainingBlock[]
+  workoutCompletions WorkoutCompletion[]
+  feedbacks          Feedback[]
+  uploadedVideos     UploadedVideo[]
+
+  @@index([trainingWeekId])
+  @@map("training_days")
+}
+
+model Exercise {
+  id             String           @id @default(uuid())
+  name           String           @unique
+  category       ExerciseCategory
+  description    String?
+  videoReference String?          @map("video_reference")
+  objective      String?
+  commonErrors   String?          @map("common_errors")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  complexMovements ComplexMovement[]
+
+  @@map("exercises")
+}
+
+model TrainingBlock {
+  id            String            @id @default(uuid())
+  trainingDayId String            @map("training_day_id")
+  title         String
+  type          TrainingBlockType
+  notes         String?
+  displayOrder  Int               @map("display_order")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  trainingDay      TrainingDay       @relation(fields: [trainingDayId], references: [id])
+  sets             TrainingSet[]
+  complexMovements ComplexMovement[]
+
+  @@index([trainingDayId])
+  @@map("training_blocks")
+}
+
+model TrainingSet {
+  id                       String            @id @default(uuid())
+  trainingBlockId          String            @map("training_block_id")
+  sets                     Int
+  reps                     Int
+  percentage               Decimal?          @db.Decimal(5, 2)
+  prescribedWeight         Decimal?          @map("prescribed_weight") @db.Decimal(6, 2)
+  targetPrExercise         TargetPrExercise? @map("target_pr_exercise")
+  calculatedWeightSnapshot Decimal?          @map("calculated_weight_snapshot") @db.Decimal(6, 2)
+  restSeconds              Int?              @map("rest_seconds")
+  notes                    String?
+  displayOrder             Int               @map("display_order")
+  createdAt                DateTime          @default(now()) @map("created_at")
+  updatedAt                DateTime          @updatedAt @map("updated_at")
+
+  trainingBlock TrainingBlock @relation(fields: [trainingBlockId], references: [id])
+
+  @@index([trainingBlockId])
+  @@map("training_sets")
+}
+
+model ComplexMovement {
+  id              String   @id @default(uuid())
+  trainingBlockId String   @map("training_block_id")
+  exerciseId      String   @map("exercise_id")
+  reps            Int
+  displayOrder    Int      @map("display_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  trainingBlock TrainingBlock @relation(fields: [trainingBlockId], references: [id])
+  exercise      Exercise      @relation(fields: [exerciseId], references: [id])
+
+  @@index([trainingBlockId])
+  @@map("complex_movements")
+}
+
+model WorkoutCompletion {
+  id              String    @id @default(uuid())
+  athleteId       String    @map("athlete_id")
+  trainingDayId   String    @map("training_day_id")
+  completed       Boolean   @default(false)
+  startedAt       DateTime? @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  durationMinutes Int?      @map("duration_minutes")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  athlete     Athlete     @relation(fields: [athleteId], references: [id])
+  trainingDay TrainingDay @relation(fields: [trainingDayId], references: [id])
+
+  @@index([athleteId, trainingDayId])
+  @@map("workout_completions")
+}
+
+model Feedback {
+  id            String   @id @default(uuid())
+  athleteId     String   @map("athlete_id")
+  trainingDayId String   @map("training_day_id")
+  rpe           Int
+  energy        Int
+  technique     Int
+  pain          Int
+  comment       String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  athlete       Athlete        @relation(fields: [athleteId], references: [id])
+  trainingDay   TrainingDay    @relation(fields: [trainingDayId], references: [id])
+  coachComments CoachComment[]
+
+  @@index([athleteId, trainingDayId])
+  @@map("feedbacks")
+}
+
+model CoachComment {
+  id         String   @id @default(uuid())
+  feedbackId String   @map("feedback_id")
+  coachId    String   @map("coach_id")
+  comment    String
+  score      Int?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  feedback Feedback @relation(fields: [feedbackId], references: [id])
+  coach    User     @relation(fields: [coachId], references: [id])
+
+  @@index([feedbackId])
+  @@map("coach_comments")
+}
+
+model UploadedVideo {
+  id            String   @id @default(uuid())
+  athleteId     String   @map("athlete_id")
+  trainingDayId String   @map("training_day_id")
+  exerciseName  String   @map("exercise_name")
+  storagePath   String   @map("storage_path")
+  duration      Int?
+  uploadedAt    DateTime @default(now()) @map("uploaded_at")
+
+  athlete     Athlete     @relation(fields: [athleteId], references: [id])
+  trainingDay TrainingDay @relation(fields: [trainingDayId], references: [id])
+
+  @@index([athleteId, trainingDayId])
+  @@map("uploaded_videos")
+}
+
+model PersonalRecord {
+  id         String           @id @default(uuid())
+  athleteId  String           @map("athlete_id")
+  exercise   TargetPrExercise
+  weight     Decimal          @db.Decimal(6, 2)
+  recordDate DateTime         @map("record_date") @db.Date
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  athlete Athlete @relation(fields: [athleteId], references: [id])
+
+  @@index([athleteId, exercise])
+  @@map("personal_records")
+}
+
+model FatigueLog {
+  id             String   @id @default(uuid())
+  athleteId      String   @map("athlete_id")
+  sleepScore     Int      @map("sleep_score")
+  stressScore    Int      @map("stress_score")
+  motivationScore Int     @map("motivation_score")
+  muscleSoreness Int      @map("muscle_soreness")
+  jointPain      Int      @map("joint_pain")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  athlete Athlete @relation(fields: [athleteId], references: [id])
+
+  @@index([athleteId, createdAt])
+  @@map("fatigue_logs")
+}

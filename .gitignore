@@ -1,0 +1,86 @@
+# Dependencies
+**/node_modules/
+
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Build output and framework caches
+**/dist/
+**/build/
+**/.next/
+**/.turbo/
+**/.cache/
+**/.parcel-cache/
+**/*.tsbuildinfo
+
+# Test output
+**/coverage/
+**/.nyc_output/
+**/test-results/
+**/playwright-report/
+
+# Logs and runtime files
+*.log
+*.log.*
+*.pid
+*.seed
+.dev-local*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local uploads and generated e-mails
+storage/videos/*
+storage/photos/*
+storage/exercises/*
+storage/mail-outbox/*
+!storage/videos/.gitkeep
+!storage/photos/.gitkeep
+!storage/exercises/.gitkeep
+!storage/mail-outbox/.gitkeep
+
+# IDE and editor settings
+.idea/
+.vscode/
+*.code-workspace
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*~
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Local database and backup files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.bak
+*.dump
+*.sql.gz
+
+# Certificates and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp

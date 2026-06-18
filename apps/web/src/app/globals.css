@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 220 14% 96%;
+  --foreground: 222 22% 12%;
+  --border: 214 16% 84%;
+  --muted: 216 16% 46%;
+  --primary: 173 76% 28%;
+  --accent: 40 85% 52%;
+  --danger: 0 72% 48%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+@layer components {
+  .input {
+    @apply h-11 w-full rounded-md border border-border px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-emerald-100;
+  }
+}

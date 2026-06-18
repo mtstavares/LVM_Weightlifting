@@ -1,0 +1,29 @@
+{
+  "name": "lvm-weightlifting",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Plataforma SaaS para gestao de atletas de levantamento de peso olimpico.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:local",
+    "dev:local": "concurrently --kill-others-on-fail --names API,WEB --prefix-colors cyan,green \"npm run dev -w @lvm/api\" \"npm run dev -w @lvm/web\"",
+    "dev:docker": "docker compose up --build",
+    "build": "npm run build -ws",
+    "lint": "npm run lint -ws",
+    "test": "npm run test -ws",
+    "format": "prettier --write .",
+    "prisma:generate": "npm run prisma:generate -w @lvm/api",
+    "prisma:migrate": "npm run prisma:migrate -w @lvm/api",
+    "prisma:seed": "npm run prisma:seed -w @lvm/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.3.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
