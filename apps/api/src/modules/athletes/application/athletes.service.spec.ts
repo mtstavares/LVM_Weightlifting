@@ -18,7 +18,11 @@ const athlete = {
   updatedAt: new Date('2026-01-01'),
   profilePhoto: null,
   birthDate: null,
+  sex: null,
   weightCategory: null,
+  competitiveLevel: null,
+  profileStatus: 'PROFILE_INCOMPLETE',
+  profileCompletedAt: null,
   user: {
     id: 'user-2',
     fullName: 'Joao Silva',
@@ -154,6 +158,29 @@ describe('AthletesService', () => {
     await expect(service.updateForTrainer('trainer-1', athlete.id, {})).resolves.toMatchObject({
       fullName: athlete.user.fullName
     });
+  });
+
+  it('blocks trainer edits after first login and blocks late invitation resend', async () => {
+    const activated = {
+      ...athlete,
+      user: {
+        ...athlete.user,
+        firstLoginAt: new Date('2026-01-02'),
+        mustChangePassword: false
+      }
+    };
+    prisma.athlete.findUnique.mockResolvedValue(activated);
+
+    await expect(
+      service.updateForTrainer('trainer-1', athlete.id, { fullName: 'Nome Proibido' })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'TRAINER_PROTECTED_EDIT_DENIED', result: 'FAILURE' })
+    );
+
+    await expect(service.resendInvitation('trainer-1', athlete.id)).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
   });
 
   it('deactivates without deletion, revokes sessions and reactivates', async () => {

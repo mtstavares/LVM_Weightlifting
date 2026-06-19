@@ -21,6 +21,6 @@ describe('audit logs api client', () => {
 
   it('rejects failed requests', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 500 }));
-    await expect(listAuditLogs()).rejects.toThrow('Nao foi possivel carregar os logs.');
+    await expect(listAuditLogs()).rejects.toThrow('Não foi possível carregar os logs.');
   });
 });

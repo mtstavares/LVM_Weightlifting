@@ -1,6 +1,7 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { TokenService } from '../domain/token-service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
 
 function contextFor(request: Record<string, unknown>) {
   return {
@@ -17,9 +18,15 @@ describe('JwtAuthGuard', () => {
     verifyRefresh: jest.fn(),
     hash: jest.fn()
   };
-  const guard = new JwtAuthGuard(tokens);
+  const prisma = {
+    user: { findUnique: jest.fn().mockResolvedValue({ isActive: true }) }
+  } as unknown as PrismaService;
+  const guard = new JwtAuthGuard(tokens, prisma);
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ isActive: true });
+  });
 
   it('authenticates using an access cookie', async () => {
     const request = { headers: {}, cookies: { access_token: 'cookie-token' } };
@@ -30,6 +37,7 @@ describe('JwtAuthGuard', () => {
       role: 'TRAINER',
       emailVerified: true,
       mustChangePassword: false,
+      profileComplete: true,
       type: 'access'
     });
 
@@ -40,7 +48,8 @@ describe('JwtAuthGuard', () => {
       email: 'coach@lvm.local',
       role: 'TRAINER',
       emailVerified: true,
-      mustChangePassword: false
+      mustChangePassword: false,
+      profileComplete: true
     });
   });
 
@@ -52,6 +61,7 @@ describe('JwtAuthGuard', () => {
       role: 'TRAINER',
       emailVerified: true,
       mustChangePassword: false,
+      profileComplete: true,
       type: 'access'
     });
 
@@ -69,6 +79,24 @@ describe('JwtAuthGuard', () => {
     tokens.verifyAccess.mockRejectedValue(new Error('expired'));
     await expect(
       guard.canActivate(contextFor({ headers: {}, cookies: { access_token: 'expired' } }))
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('rejects inactive accounts even with a valid token', async () => {
+    tokens.verifyAccess.mockResolvedValue({
+      sub: 'user-1',
+      fullName: 'Maria Silva',
+      email: 'coach@lvm.local',
+      role: 'TRAINER',
+      emailVerified: true,
+      mustChangePassword: false,
+      profileComplete: true,
+      type: 'access'
+    });
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ isActive: false });
+
+    await expect(
+      guard.canActivate(contextFor({ headers: {}, cookies: { access_token: 'valid' } }))
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

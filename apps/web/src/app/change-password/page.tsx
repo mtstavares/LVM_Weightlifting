@@ -17,8 +17,14 @@ export default function ChangePasswordPage() {
   });
 
   async function submit(input: ChangePassword) {
-    await changePassword(input);
-    router.replace('/dashboard');
+    const result = await changePassword(input);
+    router.replace(
+      result.user.role === 'ATHLETE' && !result.user.profileComplete
+        ? '/complete-profile'
+        : result.user.role === 'TRAINER'
+          ? '/trainer/feed'
+          : '/dashboard'
+    );
   }
 
   return (

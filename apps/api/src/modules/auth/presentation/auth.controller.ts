@@ -42,8 +42,6 @@ import { EmailDto } from './dto/email.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthenticatedRequest } from './authenticated-request';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import { Roles } from './roles.decorator';
-import { RolesGuard } from './roles.guard';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -222,16 +220,6 @@ export class AuthController {
     return request.user;
   }
 
-  @Get('trainer-only')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('TRAINER')
-  trainerOnly(@Req() request: AuthenticatedRequest) {
-    return {
-      authorized: true,
-      user: request.user
-    };
-  }
-
   private respondWithSession(result: AuthResult, response: Response) {
     const secure = process.env.NODE_ENV === 'production';
     response.cookie('access_token', result.tokens.accessToken, {
@@ -246,7 +234,7 @@ export class AuthController {
       sameSite: 'lax',
       secure,
       expires: result.tokens.refreshExpiresAt,
-      path: '/auth'
+      path: '/'
     });
 
     return { user: result.user };
@@ -254,6 +242,7 @@ export class AuthController {
 
   private clearSessionCookies(response: Response) {
     response.clearCookie('access_token', { path: '/' });
+    response.clearCookie('refresh_token', { path: '/' });
     response.clearCookie('refresh_token', { path: '/auth' });
   }
 }

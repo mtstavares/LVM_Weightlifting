@@ -80,11 +80,15 @@ describe('auth api client', () => {
     await refreshSession();
 
     expect(fetchMock).toHaveBeenCalledTimes(8);
+    expect(fetchMock.mock.calls[7][0]).toBe('/auth/refresh');
   });
 
   it('handles logout without content', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 204 }));
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
     await expect(logout()).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledWith('/auth/logout', expect.any(Object));
   });
 
   it('surfaces api and fallback errors', async () => {
@@ -97,7 +101,7 @@ describe('auth api client', () => {
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('error', { status: 500 }));
     await expect(login({ email: 'x@y.com', password: 'wrong' })).rejects.toThrow(
-      'Nao foi possivel concluir a solicitacao.'
+      'Não foi possível concluir a solicitação.'
     );
   });
 });

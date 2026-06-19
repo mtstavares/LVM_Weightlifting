@@ -33,7 +33,8 @@ const user: AuthUser = {
   lockedUntil: null,
   firstLoginAt: new Date('2026-01-01'),
   lastLoginAt: new Date('2026-01-01'),
-  lastPasswordChangeAt: new Date('2026-01-01')
+  lastPasswordChangeAt: new Date('2026-01-01'),
+  profileComplete: true
 };
 
 describe('AuthService', () => {
@@ -260,6 +261,7 @@ describe('AuthService', () => {
       role: user.role,
       emailVerified: true,
       mustChangePassword: false,
+      profileComplete: true,
       type: 'refresh'
     });
     refresh.findActiveByHash.mockResolvedValue({

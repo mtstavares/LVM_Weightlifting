@@ -123,6 +123,23 @@ export class AthletesService {
   ) {
     const current = await this.requireOwnedAthlete(trainerId, athleteId);
     const trainer = await this.prisma.user.findUniqueOrThrow({ where: { id: trainerId } });
+    if (current.user.firstLoginAt && !current.user.mustChangePassword) {
+      await this.audit.record({
+        event: 'TRAINER_PROTECTED_EDIT_DENIED',
+        userId: trainerId,
+        actorUserId: trainerId,
+        affectedUserId: current.userId,
+        email: current.user.email,
+        result: 'FAILURE',
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        description: `Treinador ${trainer.fullName} tentou alterar dados protegidos do atleta ${current.user.fullName}.`,
+        metadata: { athleteId, fields: Object.keys(input) }
+      });
+      throw new ForbiddenException(
+        'Athlete profile can only be edited by the athlete after the first login.'
+      );
+    }
     const names = input.fullName ? this.splitName(input.fullName) : undefined;
     const athlete = await this.prisma.athlete.update({
       where: { id: athleteId },
@@ -218,6 +235,9 @@ export class AthletesService {
 
   async resendInvitation(trainerId: string, athleteId: string, context: RequestContext = {}) {
     const athlete = await this.requireOwnedAthlete(trainerId, athleteId);
+    if (athlete.user.firstLoginAt) {
+      throw new ForbiddenException('Invitation can only be resent before the first login.');
+    }
     const trainer = await this.prisma.user.findUniqueOrThrow({ where: { id: trainerId } });
     const temporaryPassword = this.generateTemporaryPassword();
     await this.prisma.$transaction([
@@ -315,6 +335,7 @@ export class AthletesService {
     id: string;
     userId: string;
     coachId: string;
+    profilePhoto: string | null;
     isActive: boolean;
     deactivatedAt: Date | null;
     deactivationReason: string | null;
@@ -336,6 +357,7 @@ export class AthletesService {
       trainerId: athlete.coachId,
       fullName: athlete.user.fullName,
       email: athlete.user.email,
+      profilePhotoUrl: athlete.profilePhoto ? `/storage/${athlete.profilePhoto}` : null,
       status: this.calculateStatus(athlete),
       isActive: athlete.isActive && athlete.user.isActive,
       createdAt: athlete.createdAt,

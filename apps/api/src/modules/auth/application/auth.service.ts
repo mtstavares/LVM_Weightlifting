@@ -335,7 +335,8 @@ export class AuthService {
       email: user.email,
       role: user.role,
       emailVerified: Boolean(user.emailVerifiedAt),
-      mustChangePassword: user.mustChangePassword
+      mustChangePassword: user.mustChangePassword,
+      profileComplete: user.profileComplete
     });
     await this.refreshTokens.create(
       user.id,
@@ -350,7 +351,8 @@ export class AuthService {
         email: user.email,
         role: user.role,
         emailVerified: Boolean(user.emailVerifiedAt),
-        mustChangePassword: user.mustChangePassword
+        mustChangePassword: user.mustChangePassword,
+        profileComplete: user.profileComplete
       },
       tokens
     };

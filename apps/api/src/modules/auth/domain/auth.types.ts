@@ -16,6 +16,7 @@ export type AuthUser = {
   firstLoginAt: Date | null;
   lastLoginAt: Date | null;
   lastPasswordChangeAt: Date | null;
+  profileComplete: boolean;
 };
 
 export type SafeAuthUser = {
@@ -25,6 +26,7 @@ export type SafeAuthUser = {
   role: AuthRole;
   emailVerified: boolean;
   mustChangePassword: boolean;
+  profileComplete: boolean;
 };
 
 export type RefreshTokenRecord = {
@@ -42,6 +44,7 @@ export type TokenPayload = {
   role: AuthRole;
   emailVerified: boolean;
   mustChangePassword: boolean;
+  profileComplete: boolean;
   type: 'access' | 'refresh';
 };
 

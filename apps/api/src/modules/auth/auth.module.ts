@@ -15,6 +15,7 @@ import { AuthController } from './presentation/auth.controller';
 import { JwtAuthGuard } from './presentation/jwt-auth.guard';
 import { RolesGuard } from './presentation/roles.guard';
 import { PasswordChangeCompletedGuard } from './presentation/password-change-completed.guard';
+import { ProfileCompletedGuard } from './presentation/profile-completed.guard';
 
 @Module({
   imports: [JwtModule.register({})],
@@ -24,6 +25,7 @@ import { PasswordChangeCompletedGuard } from './presentation/password-change-com
     JwtAuthGuard,
     RolesGuard,
     PasswordChangeCompletedGuard,
+    ProfileCompletedGuard,
     { provide: USER_REPOSITORY, useClass: PrismaUserRepository },
     { provide: ACCOUNT_CODE_REPOSITORY, useClass: PrismaAccountCodeRepository },
     { provide: REFRESH_TOKEN_REPOSITORY, useClass: PrismaRefreshTokenRepository },
@@ -34,6 +36,7 @@ import { PasswordChangeCompletedGuard } from './presentation/password-change-com
     JwtAuthGuard,
     RolesGuard,
     PasswordChangeCompletedGuard,
+    ProfileCompletedGuard,
     AuthService,
     TOKEN_SERVICE
   ]

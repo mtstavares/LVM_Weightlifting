@@ -35,7 +35,15 @@ export default function LoginPage() {
     setServerError(null);
     try {
       const result = await login(credentials);
-      router.replace(result.user.mustChangePassword ? '/change-password' : '/dashboard');
+      router.replace(
+        result.user.mustChangePassword
+          ? '/change-password'
+          : result.user.role === 'ATHLETE' && !result.user.profileComplete
+            ? '/complete-profile'
+            : result.user.role === 'TRAINER'
+              ? '/trainer/feed'
+              : '/dashboard'
+      );
     } catch (error) {
       setServerError(error instanceof Error ? error.message : 'Falha ao autenticar.');
     }

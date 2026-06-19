@@ -22,7 +22,8 @@ describe('JwtTokenService', () => {
       email: 'coach@lvm.local',
       role: 'TRAINER' as const,
       emailVerified: true,
-      mustChangePassword: false
+      mustChangePassword: false,
+      profileComplete: true
     };
 
     const first = await service.issue(payload);

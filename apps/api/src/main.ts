@@ -2,6 +2,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser = require('cookie-parser');
+import { static as expressStatic } from 'express';
+import { resolve } from 'node:path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -11,6 +13,10 @@ async function bootstrap() {
     credentials: true
   });
   app.use(cookieParser());
+  app.use(
+    '/storage/photos',
+    expressStatic(resolve(process.env.LOCAL_STORAGE_ROOT ?? '../../storage', 'photos'))
+  );
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

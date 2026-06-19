@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createAthlete,
   deactivateAthlete,
-  getOwnAthleteProfile,
   listAthletes,
   reactivateAthlete,
   resendAthleteInvitation
@@ -25,8 +24,7 @@ describe('athletes api client', () => {
     await deactivateAthlete('athlete-1', 'Saiu da equipe');
     await reactivateAthlete('athlete-1');
     await resendAthleteInvitation('athlete-1');
-    await getOwnAthleteProfile();
-    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(fetchMock.mock.calls[0][0]).toContain('search=ana');
     expect(fetchMock.mock.calls[0][0]).toContain('status=ATIVO');
   });

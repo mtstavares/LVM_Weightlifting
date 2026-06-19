@@ -8,6 +8,9 @@ import { AthletesModule } from './modules/athletes/athletes.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { PrismaModule } from './shared/infrastructure/prisma/prisma.module';
 import { MailModule } from './shared/infrastructure/mail/mail.module';
+import { StorageModule } from './shared/infrastructure/storage/storage.module';
+import { TrainersModule } from './modules/trainers/trainers.module';
+import { TrainingModule } from './modules/training/training.module';
 
 @Module({
   imports: [
@@ -23,8 +26,11 @@ import { MailModule } from './shared/infrastructure/mail/mail.module';
     ]),
     PrismaModule,
     MailModule,
+    StorageModule,
     AuthModule,
     AthletesModule,
+    TrainersModule,
+    TrainingModule,
     AuditModule,
     HealthModule
   ],

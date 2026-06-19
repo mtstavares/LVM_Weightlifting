@@ -22,8 +22,8 @@ function VerifyEmailContent() {
     setLoading(true);
     setError(null);
     try {
-      await verifyEmail(email, code);
-      router.replace('/dashboard');
+      const result = await verifyEmail(email, code);
+      router.replace(result.user.role === 'TRAINER' ? '/trainer/feed' : '/dashboard');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Codigo invalido.');
     } finally {

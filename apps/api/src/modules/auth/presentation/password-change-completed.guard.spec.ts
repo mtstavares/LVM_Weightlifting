@@ -11,7 +11,8 @@ function context(mustChangePassword: boolean) {
           email: 'user@lvm.local',
           role: 'ATHLETE',
           emailVerified: true,
-          mustChangePassword
+          mustChangePassword,
+          profileComplete: false
         }
       })
     })

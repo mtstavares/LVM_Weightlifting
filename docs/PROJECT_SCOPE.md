@@ -6,13 +6,15 @@ Construir uma plataforma web responsiva para treinadores e atletas de Levantamen
 
 ## Papeis
 
-- `TRAINER`: gerencia atletas, treinos, feedbacks, videos, PRs, exercicios e analytics.
-- `ATHLETE`: visualiza treinos, envia check-ins, feedbacks, videos, PRs e acompanha evolucao.
+- `TRAINER`: administra o vinculo e visualiza perfis e PRs dos proprios atletas.
+- `ATHLETE`: gerencia o proprio perfil e PRs, visualiza treinos e acompanha evolucao.
 
 ## Modulos
 
 - Autenticacao com JWT e refresh token.
 - Gestao de atletas.
+- Finalizacao obrigatoria do perfil esportivo pelo atleta.
+- Perfil e PRs do atleta em modo somente leitura para o treinador.
 - Status calculado da conta do atleta e desativacao reversivel.
 - Auditoria legivel e tecnicamente rastreavel.
 - Planejamento de semanas, dias, blocos, series e complexes.

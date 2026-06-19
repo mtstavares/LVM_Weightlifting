@@ -4,7 +4,7 @@ Plataforma SaaS para gestao de atletas de Levantamento de Peso Olimpico (LPO).
 
 ## Sprint Atual
 
-Autenticacao segura e gestao inicial de atletas: verificacao de e-mail, recuperacao de senha, primeiro acesso obrigatorio, JWT, refresh token rotativo e isolamento por treinador.
+Sprints 3 a 6 concluidas: gestao de atletas, calendario de treinos, prescricao, execucao, feedback, auditoria e isolamento por treinador.
 
 ## Como Rodar
 
@@ -37,6 +37,12 @@ Para envio real, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD
 - Recuperacao de senha envia uma credencial temporaria de uso unico, valida por 30 minutos.
 - Atletas sao criados somente pelo treinador autenticado.
 - O primeiro login do atleta exige troca imediata da senha.
+- A primeira troca de senha redireciona obrigatoriamente para a finalizacao do perfil.
+- O atleta gerencia os proprios dados pessoais, foto e PRs.
+- O treinador visualiza o perfil completo e os PRs, sem editar dados protegidos.
+- O treinador prescreve treinos no calendario do atleta com quatro secoes configuraveis.
+- O atleta executa secoes, acompanha o progresso, conclui a sessao e envia feedback.
+- O treinador consulta o feedback e adiciona comentarios preservados no historico.
 - O backend filtra atletas pelo treinador autenticado e retorna `403` em acesso cruzado.
 ## Comandos
 
