@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Patch,
+  ParseEnumPipe,
   Post,
   Put,
   Query,
@@ -13,6 +14,7 @@ import {
   UseGuards
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { PersonalRecordMovement } from '@prisma/client';
 import { AuthenticatedRequest } from '../../auth/presentation/authenticated-request';
 import { JwtAuthGuard } from '../../auth/presentation/jwt-auth.guard';
 import { PasswordChangeCompletedGuard } from '../../auth/presentation/password-change-completed.guard';
@@ -23,6 +25,8 @@ import { TrainingService } from '../application/training.service';
 import { AddCoachCommentDto } from './dto/add-coach-comment.dto';
 import { SaveFeedbackDto } from './dto/save-feedback.dto';
 import { SaveTrainingDayDto } from './dto/save-training-day.dto';
+import { SendTrainingMessageDto } from './dto/send-training-message.dto';
+import { UpdateSetAttemptDto } from './dto/update-set-attempt.dto';
 import { UpdateSectionDto } from './dto/update-section.dto';
 
 @ApiTags('Training')
@@ -141,6 +145,24 @@ export class TrainingController {
     );
   }
 
+  @Patch('athlete/days/:trainingDayId/sets/:trainingSetId/attempts/:setIndex')
+  @Roles('ATHLETE')
+  updateSetAttempt(
+    @Req() request: AuthenticatedRequest,
+    @Param('trainingDayId') trainingDayId: string,
+    @Param('trainingSetId') trainingSetId: string,
+    @Param('setIndex') setIndex: string,
+    @Body() input: UpdateSetAttemptDto
+  ) {
+    return this.training.updateSetAttempt(
+      request.user.id,
+      trainingDayId,
+      trainingSetId,
+      Number(setIndex),
+      input.successful
+    );
+  }
+
   @Post('athlete/days/:trainingDayId/complete')
   @Roles('ATHLETE')
   completeDay(
@@ -148,6 +170,22 @@ export class TrainingController {
     @Param('trainingDayId') trainingDayId: string
   ) {
     return this.training.completeDay(request.user.id, trainingDayId, this.context(request));
+  }
+
+  @Post('athlete/days/:trainingDayId/personal-records/:movement/confirm')
+  @Roles('ATHLETE')
+  confirmPersonalRecord(
+    @Req() request: AuthenticatedRequest,
+    @Param('trainingDayId') trainingDayId: string,
+    @Param('movement', new ParseEnumPipe(PersonalRecordMovement))
+    movement: PersonalRecordMovement
+  ) {
+    return this.training.confirmPersonalRecord(
+      request.user.id,
+      trainingDayId,
+      movement,
+      this.context(request)
+    );
   }
 
   @Put('athlete/days/:trainingDayId/feedback')
@@ -161,6 +199,21 @@ export class TrainingController {
       request.user.id,
       trainingDayId,
       input,
+      this.context(request)
+    );
+  }
+
+  @Post('athlete/days/:trainingDayId/messages')
+  @Roles('ATHLETE')
+  addAthleteMessage(
+    @Req() request: AuthenticatedRequest,
+    @Param('trainingDayId') trainingDayId: string,
+    @Body() input: SendTrainingMessageDto
+  ) {
+    return this.training.addAthleteMessage(
+      request.user.id,
+      trainingDayId,
+      input.message,
       this.context(request)
     );
   }

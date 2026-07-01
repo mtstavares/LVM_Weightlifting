@@ -117,6 +117,7 @@ export class AthleteProfileService {
     const athlete = await this.findByUserId(userId);
     return this.prisma.personalRecord.findMany({
       where: { athleteId: athlete.id },
+      include: { history: { orderBy: { createdAt: 'desc' }, take: 10 } },
       orderBy: { exercise: 'asc' }
     });
   }
@@ -128,22 +129,38 @@ export class AthleteProfileService {
     context: Context = {}
   ) {
     const athlete = await this.findByUserId(userId);
-    const record = await this.prisma.personalRecord.upsert({
-      where: {
-        athleteId_exercise: { athleteId: athlete.id, exercise: movement }
-      },
-      create: {
-        athleteId: athlete.id,
-        exercise: movement,
-        weight: input.weight,
-        recordDate: new Date(input.recordDate),
-        notes: input.notes?.trim() || null
-      },
-      update: {
-        weight: input.weight,
-        recordDate: new Date(input.recordDate),
-        notes: input.notes?.trim() || null
-      }
+    const record = await this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.personalRecord.upsert({
+        where: {
+          athleteId_exercise: { athleteId: athlete.id, exercise: movement }
+        },
+        create: {
+          athleteId: athlete.id,
+          exercise: movement,
+          weight: input.weight,
+          recordDate: new Date(input.recordDate),
+          notes: input.notes?.trim() || null
+        },
+        update: {
+          weight: input.weight,
+          recordDate: new Date(input.recordDate),
+          notes: input.notes?.trim() || null
+        }
+      });
+      await transaction.personalRecordHistory.create({
+        data: {
+          personalRecordId: updated.id,
+          athleteId: athlete.id,
+          exercise: movement,
+          weight: input.weight,
+          recordDate: new Date(input.recordDate),
+          notes: input.notes?.trim() || null
+        }
+      });
+      return transaction.personalRecord.findUniqueOrThrow({
+        where: { id: updated.id },
+        include: { history: { orderBy: { createdAt: 'desc' }, take: 10 } }
+      });
     });
     await this.audit.record({
       event: 'PERSONAL_RECORD_UPSERTED',

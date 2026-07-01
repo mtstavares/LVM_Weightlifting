@@ -25,14 +25,24 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as
+    const errorText = await response.text().catch(() => '');
+    const body = (errorText ? safeJson(errorText) : null) as
       | { message?: string | string[] }
       | null;
     const message = Array.isArray(body?.message) ? body.message.join(' ') : body?.message;
     throw new Error(message ?? errorMessage);
   }
   if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 export function apiRequest<T>(path: string, options?: ApiRequestOptions) {

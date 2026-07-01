@@ -4,6 +4,7 @@ import {
   IsArray,
   IsEnum,
   IsInt,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -14,7 +15,14 @@ import {
 } from 'class-validator';
 import { TrainingSectionType } from '@prisma/client';
 
+export type PrescriptionMode = 'MANUAL' | 'PERCENTAGE';
+
 class TrainingExerciseDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  exerciseKey?: string;
+
   @IsString()
   @MaxLength(120)
   name!: string;
@@ -30,15 +38,19 @@ class TrainingExerciseDto {
   reps!: number;
 
   @IsOptional()
+  @IsIn(['MANUAL', 'PERCENTAGE'])
+  mode?: PrescriptionMode;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   load?: number;
 
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(3600)
-  restSeconds?: number;
+  @IsNumber()
+  @Min(1)
+  @Max(1000)
+  percentage?: number;
 }
 
 class TrainingSectionDto {

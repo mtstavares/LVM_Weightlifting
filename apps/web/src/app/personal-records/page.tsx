@@ -129,7 +129,15 @@ function RecordForm({
         }
       }}
     >
-      <h2 className="font-semibold">{movementLabels[movement]}</h2>
+          <h2 className="font-semibold">{movementLabels[movement]}</h2>
+      {record?.history?.length ? (
+        <div className="mt-3 rounded-md bg-slate-50 p-3 text-xs text-muted">
+          <p className="font-medium text-foreground">Últimas atualizações</p>
+          {record.history.slice(0, 3).map((item) => (
+            <p className="mt-1" key={item.id}>{item.weight} kg em {new Date(item.recordDate).toLocaleDateString('pt-BR')}</p>
+          ))}
+        </div>
+      ) : null}
       <label className="mt-4 block text-sm">
         Carga (kg)
         <input className="input mt-2" min="0.5" max="1000" step="0.01" required type="number" value={weight} onChange={(event) => setWeight(event.target.value)} />

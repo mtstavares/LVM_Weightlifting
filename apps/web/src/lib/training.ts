@@ -9,11 +9,20 @@ export type TrainingSectionType =
 
 export type TrainingExercise = {
   id?: string;
+  exerciseKey: string | null;
   name: string;
   sets: number;
   reps: number;
   load: number | null;
-  restSeconds: number | null;
+  percentage: number | null;
+  targetPrExercise: string | null;
+  prBaseLabel: string | null;
+  calculatedWeight: number | null;
+  attempts: {
+    setIndex: number;
+    successful: boolean | null;
+    completedAt: string | null;
+  }[];
 };
 
 export type TrainingSection = {
@@ -50,6 +59,19 @@ export type TrainingDay = {
       coach: { id: string; fullName: string };
     }[];
   } | null;
+  messages: {
+    id: string;
+    message: string;
+    createdAt: string;
+    sender: { id: string; fullName: string; role: 'TRAINER' | 'ATHLETE' };
+  }[];
+  possiblePersonalRecords: {
+    movement: string;
+    label: string;
+    currentPr: number;
+    candidateWeight: number;
+    exerciseName: string;
+  }[];
   history: {
     id: string;
     version: number;
@@ -77,11 +99,13 @@ export type SaveTrainingDay = {
     type: TrainingSectionType;
     notes?: string;
     exercises: {
+      exerciseKey?: string;
       name: string;
       sets: number;
       reps: number;
+      mode?: 'MANUAL' | 'PERCENTAGE';
       load?: number;
-      restSeconds?: number;
+      percentage?: number;
     }[];
   }[];
 };
@@ -138,10 +162,29 @@ export function updateTrainingSection(
   );
 }
 
+export function updateTrainingSetAttempt(
+  trainingDayId: string,
+  trainingSetId: string,
+  setIndex: number,
+  successful: boolean
+) {
+  return apiRequest<TrainingDay>(
+    `/training/athlete/days/${trainingDayId}/sets/${trainingSetId}/attempts/${setIndex}`,
+    { method: 'PATCH', body: JSON.stringify({ successful }) }
+  );
+}
+
 export function completeTraining(trainingDayId: string) {
   return apiRequest<TrainingDay>(`/training/athlete/days/${trainingDayId}/complete`, {
     method: 'POST'
   });
+}
+
+export function confirmTrainingPersonalRecord(trainingDayId: string, movement: string) {
+  return apiRequest<TrainingDay>(
+    `/training/athlete/days/${trainingDayId}/personal-records/${movement}/confirm`,
+    { method: 'POST' }
+  );
 }
 
 export function saveTrainingFeedback(
@@ -151,6 +194,13 @@ export function saveTrainingFeedback(
   return apiRequest(`/training/athlete/days/${trainingDayId}/feedback`, {
     method: 'PUT',
     body: JSON.stringify(input)
+  });
+}
+
+export function sendAthleteTrainingMessage(trainingDayId: string, message: string) {
+  return apiRequest(`/training/athlete/days/${trainingDayId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message })
   });
 }
 

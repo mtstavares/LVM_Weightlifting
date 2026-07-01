@@ -32,11 +32,17 @@ function fixture(overrides: Record<string, unknown> = {}) {
         sets: [
           {
             id: 'set-1',
+            exerciseKey: null,
             exerciseName: 'Mobilidade',
             sets: 2,
             reps: 10,
+            percentage: null,
             prescribedWeight: null,
+            targetPrExercise: null,
+            calculatedWeightSnapshot: null,
+            prUpdateEligible: false,
             restSeconds: 30,
+            attempts: [],
             displayOrder: 0
           }
         ]
@@ -44,6 +50,8 @@ function fixture(overrides: Record<string, unknown> = {}) {
     ],
     workoutCompletions: [],
     feedbacks: [],
+    trainingMessages: [],
+    trainingWeek: { athlete: { personalRecords: [], user: { id: 'athlete-user', fullName: 'Atleta Teste' } } },
     revisions: [],
     ...overrides
   };
@@ -58,6 +66,8 @@ describe('TrainingService', () => {
     userId: 'athlete-user',
     coachId: 'trainer-1',
     user: { id: 'athlete-user', fullName: 'Atleta Teste', email: 'athlete@lvm.local' }
+    ,
+    personalRecords: []
   };
 
   beforeEach(() => {
@@ -74,10 +84,14 @@ describe('TrainingService', () => {
       trainingRevision: { create: jest.fn() },
       complexMovement: { deleteMany: jest.fn() },
       trainingSet: { deleteMany: jest.fn() },
+      trainingSetAttempt: { upsert: jest.fn() },
       trainingBlock: { deleteMany: jest.fn(), update: jest.fn() },
       workoutCompletion: { upsert: jest.fn() },
-      feedback: { upsert: jest.fn() },
+      feedback: { create: jest.fn(), upsert: jest.fn() },
+      personalRecord: { upsert: jest.fn() },
+      personalRecordHistory: { create: jest.fn() },
       coachComment: { create: jest.fn() },
+      trainingMessage: { create: jest.fn() },
       $transaction: jest.fn(async (input: any) =>
         typeof input === 'function' ? input(prisma) : Promise.all(input)
       )
@@ -125,13 +139,13 @@ describe('TrainingService', () => {
         title: 'Treino',
         sections: [{
           type: 'WARMUP',
-          exercises: [{ name: 'Mobilidade', sets: 2, reps: 10, restSeconds: 30 }]
+          exercises: [{ name: 'Mobilidade', sets: 2, reps: 10, load: 20 }]
         }]
       },
       {}
     );
 
-    expect(result?.sections[0].exercises[0].name).toBe('Mobilidade');
+    expect(result!.sections[0].exercises[0].name).toBe('Mobilidade');
     expect(prisma.trainingRevision.create).toHaveBeenCalled();
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'TRAINING_CREATED' }));
   });
@@ -155,6 +169,141 @@ describe('TrainingService', () => {
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'TRAINING_UPDATED' }));
   });
 
+  it('calculates percentage prescriptions from the matching PR and keeps snapshot', async () => {
+    prisma.athlete.findUnique.mockResolvedValue({
+      ...athlete,
+      personalRecords: [{ exercise: 'BACK_SQUAT', weight: 200 }]
+    });
+    prisma.trainingDay.findFirst.mockResolvedValue(null);
+    prisma.trainingWeek.findFirst.mockResolvedValue({ id: 'week-1' });
+    prisma.trainingDay.create.mockResolvedValue(fixture({ blocks: [] }));
+    prisma.trainingDay.update.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseName: 'Back Squat',
+          sets: 1,
+          percentage: 85,
+          prescribedWeight: 170,
+          calculatedWeightSnapshot: 170,
+          exerciseKey: 'BACK_SQUAT',
+          prUpdateEligible: true,
+          targetPrExercise: 'BACK_SQUAT'
+        }]
+      }]
+    }));
+
+    const result = await service.saveDay(
+      { id: 'trainer-1', fullName: 'Treinador' },
+      'athlete-1',
+      dateKey,
+      { sections: [{ type: 'STRENGTH', exercises: [{ exerciseKey: 'BACK_SQUAT', name: 'Back Squat', sets: 5, reps: 3, mode: 'PERCENTAGE', percentage: 85 }] }] },
+      {}
+    );
+
+    expect(prisma.trainingDay.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          blocks: expect.objectContaining({
+            create: [expect.objectContaining({
+              sets: expect.objectContaining({
+                create: [expect.objectContaining({
+                  percentage: 85,
+                  prescribedWeight: 170,
+                  calculatedWeightSnapshot: 170,
+                  exerciseKey: 'BACK_SQUAT',
+                  prUpdateEligible: true,
+                  targetPrExercise: 'BACK_SQUAT'
+                })]
+              })
+            })]
+          })
+        })
+      })
+    );
+    expect(result!.sections[0].exercises[0]).toMatchObject({ percentage: 85, calculatedWeight: 170 });
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'TRAINING_PERCENTAGE_CALCULATED' }));
+  });
+
+  it.each([
+    ['HANG_SNATCH', 'Hang Snatch', 'SNATCH', 100, 80, 80],
+    ['POWER_SNATCH', 'Power Snatch', 'SNATCH', 100, 75, 75],
+    ['SNATCH_BALANCE', 'Snatch Balance', 'SNATCH', 100, 60, 60],
+    ['CLEAN_PULL', 'Clean Pull', 'CLEAN_JERK', 150, 90, 135],
+    ['SPLIT_JERK', 'Split Jerk', 'CLEAN_JERK', 150, 80, 120],
+    ['PAUSE_BACK_SQUAT', 'Pause Back Squat', 'BACK_SQUAT', 200, 85, 170],
+    ['PAUSE_FRONT_SQUAT', 'Pause Front Squat', 'FRONT_SQUAT', 160, 75, 120],
+    ['RDL', 'RDL', 'DEADLIFT', 220, 70, 154]
+  ])('uses configured PR base for %s percentage prescription', async (exerciseKey, name, prBase, prWeight, percentage, expectedWeight) => {
+    prisma.athlete.findUnique.mockResolvedValue({
+      ...athlete,
+      personalRecords: [{ exercise: prBase, weight: prWeight }]
+    });
+    prisma.trainingDay.findFirst.mockResolvedValue(null);
+    prisma.trainingWeek.findFirst.mockResolvedValue({ id: 'week-1' });
+    prisma.trainingDay.create.mockResolvedValue(fixture({ blocks: [] }));
+    prisma.trainingDay.update.mockResolvedValue(fixture());
+
+    await service.saveDay(
+      { id: 'trainer-1', fullName: 'Treinador' },
+      'athlete-1',
+      dateKey,
+      { sections: [{ type: 'STRENGTH', exercises: [{ exerciseKey, name, sets: 4, reps: 2, mode: 'PERCENTAGE', percentage }] }] },
+      {}
+    );
+
+    expect(prisma.trainingDay.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          blocks: expect.objectContaining({
+            create: [expect.objectContaining({
+              sets: expect.objectContaining({
+                create: [expect.objectContaining({
+                  exerciseKey,
+                  exerciseName: name,
+                  percentage,
+                  prescribedWeight: expectedWeight,
+                  calculatedWeightSnapshot: expectedWeight,
+                  targetPrExercise: prBase,
+                  prUpdateEligible: false
+                })]
+              })
+            })]
+          })
+        })
+      })
+    );
+  });
+
+  it('rejects percentage prescription without a mapped or registered PR', async () => {
+    prisma.trainingDay.findFirst.mockResolvedValue(null);
+    await expect(service.saveDay(
+      { id: 'trainer-1', fullName: 'Treinador' },
+      'athlete-1',
+      dateKey,
+      { sections: [{ type: 'STRENGTH', exercises: [{ name: 'Good Morning', sets: 3, reps: 5, mode: 'PERCENTAGE', percentage: 80 }] }] },
+      {}
+    )).rejects.toBeInstanceOf(BadRequestException);
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'TRAINING_PERCENTAGE_WITHOUT_PR', result: 'FAILURE' }));
+
+    await expect(service.saveDay(
+      { id: 'trainer-1', fullName: 'Treinador' },
+      'athlete-1',
+      dateKey,
+      { sections: [{ type: 'STRENGTH', exercises: [{ exerciseKey: 'DEADLIFT', name: 'Deadlift', sets: 3, reps: 5, mode: 'PERCENTAGE', percentage: 80 }] }] },
+      {}
+    )).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(service.saveDay(
+      { id: 'trainer-1', fullName: 'Treinador' },
+      'athlete-1',
+      dateKey,
+      { sections: [{ type: 'WARMUP', exercises: [{ exerciseKey: 'MOBILITY', name: 'Mobilidade', sets: 2, reps: 10, mode: 'PERCENTAGE', percentage: 50 }] }] },
+      {}
+    )).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('logically deletes an unfinished workout and preserves snapshot', async () => {
     prisma.trainingDay.findFirst.mockResolvedValue(fixture());
     prisma.trainingRevision.create.mockResolvedValue({});
@@ -173,13 +322,32 @@ describe('TrainingService', () => {
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'TRAINING_DELETED' }));
   });
 
-  it('starts, updates a section and completes the athlete workout', async () => {
+  it('starts, updates a section with answered sets and completes the athlete workout', async () => {
     const started = fixture({ workoutCompletions: [] });
+    const answered = fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          sets: 1,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      workoutCompletions: [{ startedAt: new Date(Date.now() - 60_000), completed: false }]
+    });
     prisma.trainingDay.findFirst
       .mockResolvedValueOnce(started)
-      .mockResolvedValueOnce(started)
+      .mockResolvedValueOnce(answered)
       .mockResolvedValueOnce(fixture({
-        blocks: [{ ...fixture().blocks[0], completedAt: new Date() }],
+        blocks: [{
+          ...fixture().blocks[0],
+          completedAt: new Date(),
+          sets: [{
+            ...fixture().blocks[0].sets[0],
+            sets: 1,
+            attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+          }]
+        }],
         workoutCompletions: [{ startedAt: new Date(Date.now() - 60_000), completed: false }]
       }));
     prisma.workoutCompletion.upsert.mockResolvedValue({ startedAt: new Date() });
@@ -196,6 +364,354 @@ describe('TrainingService', () => {
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'TRAINING_COMPLETED' }));
   });
 
+  it('rejects completing a section before all sets are answered', async () => {
+    prisma.trainingDay.findFirst.mockResolvedValue(fixture({
+      workoutCompletions: [{ startedAt: new Date(), completed: false }],
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{ ...fixture().blocks[0].sets[0], sets: 2, attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }] }]
+      }]
+    }));
+
+    await expect(
+      service.updateSection('athlete-user', 'day-1', 'section-1', true)
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('marks individual set attempts before workout completion', async () => {
+    prisma.trainingDay.findFirst.mockResolvedValue(fixture({
+      workoutCompletions: [{ startedAt: new Date(), completed: false }],
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{ ...fixture().blocks[0].sets[0], sets: 3 }]
+      }]
+    }));
+    prisma.trainingSetAttempt.upsert.mockResolvedValue({});
+    prisma.trainingDay.findUnique.mockResolvedValue(fixture({
+      workoutCompletions: [{ startedAt: new Date(), completed: false }],
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          sets: 3,
+          attempts: [{ setIndex: 2, successful: false, completedAt: new Date() }]
+        }]
+      }]
+    }));
+
+    const result = await service.updateSetAttempt('athlete-user', 'day-1', 'set-1', 2, false);
+
+    expect(prisma.trainingSetAttempt.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { trainingSetId_setIndex: { trainingSetId: 'set-1', setIndex: 2 } },
+        create: { trainingSetId: 'set-1', setIndex: 2, successful: false }
+      })
+    );
+    expect(prisma.trainingBlock.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { completedAt: null } })
+    );
+    expect(result!.sections[0].exercises[0].attempts[1]).toMatchObject({ setIndex: 2, successful: false });
+  });
+
+  it('automatically completes a section after all sets are answered', async () => {
+    prisma.trainingDay.findFirst.mockResolvedValue(fixture({
+      workoutCompletions: [{ startedAt: new Date(), completed: false }],
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          sets: 2,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }]
+    }));
+    prisma.trainingSetAttempt.upsert.mockResolvedValue({});
+    prisma.trainingDay.findUnique.mockResolvedValue(fixture({
+      workoutCompletions: [{ startedAt: new Date(), completed: false }],
+      blocks: [{
+        ...fixture().blocks[0],
+        completedAt: new Date(),
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          sets: 2,
+          attempts: [
+            { setIndex: 1, successful: true, completedAt: new Date() },
+            { setIndex: 2, successful: false, completedAt: new Date() }
+          ]
+        }]
+      }]
+    }));
+
+    await service.updateSetAttempt('athlete-user', 'day-1', 'set-1', 2, false);
+
+    expect(prisma.trainingBlock.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { completedAt: expect.any(Date) } })
+    );
+  });
+
+  it('identifies possible personal records after completion without updating PRs', async () => {
+    prisma.athlete.findUnique.mockResolvedValue({
+      ...athlete,
+      personalRecords: [{ exercise: 'SNATCH', weight: 100 }]
+    });
+    prisma.trainingDay.findFirst.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        completedAt: new Date(),
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'SNATCH',
+          exerciseName: 'Snatch',
+          sets: 1,
+          prescribedWeight: 105,
+          targetPrExercise: 'SNATCH',
+          prUpdateEligible: true,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: 'SNATCH', weight: 100 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      },
+      workoutCompletions: [{ startedAt: new Date(Date.now() - 60_000), completed: false }]
+    }));
+    prisma.workoutCompletion.upsert.mockResolvedValue({});
+    prisma.trainingDay.findUnique.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'SNATCH',
+          exerciseName: 'Snatch',
+          sets: 1,
+          prescribedWeight: 105,
+          targetPrExercise: 'SNATCH',
+          prUpdateEligible: true,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: 'SNATCH', weight: 100 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      },
+      workoutCompletions: [{ startedAt: new Date(), completed: true, finishedAt: new Date() }]
+    }));
+
+    const result = await service.completeDay('athlete-user', 'day-1', {});
+
+    expect(result!.possiblePersonalRecords).toEqual([
+      expect.objectContaining({ movement: 'SNATCH', candidateWeight: 105, currentPr: 100 })
+    ]);
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'PERSONAL_RECORD_CANDIDATE_IDENTIFIED' }));
+  });
+
+  it('does not expose possible personal records before workout completion', async () => {
+    prisma.trainingDay.findFirst.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        completedAt: new Date(),
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'SNATCH',
+          exerciseName: 'Snatch',
+          sets: 1,
+          prescribedWeight: 105,
+          targetPrExercise: 'SNATCH',
+          prUpdateEligible: true,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: 'SNATCH', weight: 100 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      },
+      workoutCompletions: [{ startedAt: new Date(), completed: false }]
+    }));
+
+    const result = await service.athleteDay('athlete-user', dateKey);
+
+    expect(result!.possiblePersonalRecords).toEqual([]);
+  });
+
+  it('confirms a post-workout personal record candidate automatically', async () => {
+    prisma.athlete.findUnique.mockResolvedValue({
+      ...athlete,
+      personalRecords: [{ exercise: 'SNATCH', weight: 100 }]
+    });
+    prisma.trainingDay.findFirst.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        completedAt: new Date(),
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'SNATCH',
+          exerciseName: 'Snatch',
+          sets: 1,
+          prescribedWeight: 105,
+          targetPrExercise: 'SNATCH',
+          prUpdateEligible: true,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: 'SNATCH', weight: 100 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      },
+      workoutCompletions: [{ startedAt: new Date(), completed: true, finishedAt: new Date() }]
+    }));
+    prisma.personalRecord.upsert.mockResolvedValue({ id: 'record-1' });
+    prisma.trainingDay.findUnique.mockResolvedValue(fixture({
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: 'SNATCH', weight: 105 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      },
+      workoutCompletions: [{ startedAt: new Date(), completed: true, finishedAt: new Date() }]
+    }));
+
+    const result = await service.confirmPersonalRecord('athlete-user', 'day-1', 'SNATCH', {});
+
+    expect(prisma.personalRecord.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { athleteId_exercise: { athleteId: 'athlete-1', exercise: 'SNATCH' } },
+        update: expect.objectContaining({ weight: 105 })
+      })
+    );
+    expect(prisma.personalRecordHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ exercise: 'SNATCH', weight: 105 }) })
+    );
+    expect(result!.possiblePersonalRecords).toEqual([]);
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'PERSONAL_RECORD_UPSERTED' }));
+  });
+
+  it.each([
+    ['HANG_SNATCH', 'Hang Snatch', 'SNATCH'],
+    ['CLEAN_PULL', 'Clean Pull', 'CLEAN_JERK']
+  ])('does not suggest PR update for derived exercise %s', async (exerciseKey, exerciseName, targetPrExercise) => {
+    prisma.athlete.findUnique.mockResolvedValue({
+      ...athlete,
+      personalRecords: [{ exercise: targetPrExercise, weight: 100 }]
+    });
+    prisma.trainingDay.findFirst.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        completedAt: new Date(),
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey,
+          exerciseName,
+          sets: 1,
+          prescribedWeight: 120,
+          targetPrExercise,
+          prUpdateEligible: false,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: targetPrExercise, weight: 100 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      },
+      workoutCompletions: [{ startedAt: new Date(Date.now() - 60_000), completed: false }]
+    }));
+    prisma.workoutCompletion.upsert.mockResolvedValue({});
+    prisma.trainingDay.findUnique.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey,
+          exerciseName,
+          sets: 1,
+          prescribedWeight: 120,
+          targetPrExercise,
+          prUpdateEligible: false,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: targetPrExercise, weight: 100 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      }
+    }));
+
+    const result = await service.completeDay('athlete-user', 'day-1', {});
+
+    expect(result!.possiblePersonalRecords).toEqual([]);
+    expect(audit.record).not.toHaveBeenCalledWith(expect.objectContaining({ event: 'PERSONAL_RECORD_CANDIDATE_IDENTIFIED' }));
+  });
+
+  it('suggests PR update for Clean & Jerk when eligible', async () => {
+    prisma.athlete.findUnique.mockResolvedValue({
+      ...athlete,
+      personalRecords: [{ exercise: 'CLEAN_JERK', weight: 150 }]
+    });
+    prisma.trainingDay.findFirst.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        completedAt: new Date(),
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'CLEAN_JERK',
+          exerciseName: 'Clean & Jerk',
+          sets: 1,
+          prescribedWeight: 155,
+          targetPrExercise: 'CLEAN_JERK',
+          prUpdateEligible: true,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: 'CLEAN_JERK', weight: 150 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      },
+      workoutCompletions: [{ startedAt: new Date(Date.now() - 60_000), completed: false }]
+    }));
+    prisma.workoutCompletion.upsert.mockResolvedValue({});
+    prisma.trainingDay.findUnique.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'CLEAN_JERK',
+          exerciseName: 'Clean & Jerk',
+          sets: 1,
+          prescribedWeight: 155,
+          targetPrExercise: 'CLEAN_JERK',
+          prUpdateEligible: true,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: 'CLEAN_JERK', weight: 150 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      },
+      workoutCompletions: [{ startedAt: new Date(), completed: true, finishedAt: new Date() }]
+    }));
+
+    const result = await service.completeDay('athlete-user', 'day-1', {});
+
+    expect(result!.possiblePersonalRecords).toEqual([
+      expect.objectContaining({ movement: 'CLEAN_JERK', candidateWeight: 155, currentPr: 150 })
+    ]);
+  });
+
   it('requires all populated sections before completion', async () => {
     prisma.trainingDay.findFirst.mockResolvedValue(
       fixture({ workoutCompletions: [{ startedAt: new Date(), completed: false }] })
@@ -209,7 +725,8 @@ describe('TrainingService', () => {
     prisma.trainingDay.findFirst.mockResolvedValue(
       fixture({ workoutCompletions: [{ startedAt: new Date(), completed: true, finishedAt: new Date() }] })
     );
-    prisma.feedback.upsert.mockResolvedValue({ id: 'feedback-1' });
+    prisma.feedback.create.mockResolvedValue({ id: 'feedback-1' });
+    prisma.trainingMessage.create.mockResolvedValue({ id: 'message-1' });
 
     await service.saveFeedback(
       'athlete-user',
@@ -218,8 +735,11 @@ describe('TrainingService', () => {
       {}
     );
 
-    expect(prisma.feedback.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ create: expect.objectContaining({ rpe: 8, fatigue: 6 }) })
+    expect(prisma.feedback.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ rpe: 8, fatigue: 6 }) })
+    );
+    expect(prisma.trainingMessage.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ message: 'Boa sessão' }) })
     );
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'FEEDBACK_CREATED' }));
   });
@@ -230,7 +750,7 @@ describe('TrainingService', () => {
       trainingWeek: { athlete },
       feedbacks: [{ id: 'feedback-1' }]
     });
-    prisma.coachComment.create.mockResolvedValue({ id: 'comment-1' });
+    prisma.trainingMessage.create.mockResolvedValue({ id: 'message-1' });
 
     await service.addCoachComment(
       { id: 'trainer-1', fullName: 'Treinador' },
@@ -239,7 +759,9 @@ describe('TrainingService', () => {
       {}
     );
 
-    expect(prisma.coachComment.create).toHaveBeenCalled();
+    expect(prisma.trainingMessage.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ message: 'Boa evolução.' }) })
+    );
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'COACH_COMMENT_ADDED' }));
   });
 
@@ -266,6 +788,12 @@ describe('TrainingService', () => {
         action: 'CREATED',
         createdAt: new Date(),
         changedBy: { id: 'trainer-1', fullName: 'Treinador', role: 'TRAINER' }
+      }],
+      trainingMessages: [{
+        id: 'message-1',
+        message: 'Tudo certo',
+        createdAt: new Date(),
+        sender: { id: 'athlete-user', fullName: 'Atleta Teste', role: 'ATHLETE' }
       }]
     }));
 
@@ -274,8 +802,35 @@ describe('TrainingService', () => {
     expect(result).toMatchObject({
       status: 'COMPLETED',
       feedback: { pse: 7, fatigue: 4 },
+      messages: [{ message: 'Tudo certo' }],
       history: [{ version: 1 }]
     });
+  });
+
+  it('rejects feedback changes after first submission and allows athlete messages', async () => {
+    prisma.trainingDay.findFirst
+      .mockResolvedValueOnce(fixture({
+        workoutCompletions: [{ startedAt: new Date(), completed: true, finishedAt: new Date() }],
+        feedbacks: [{ id: 'feedback-1' }]
+      }))
+      .mockResolvedValueOnce(fixture({
+        workoutCompletions: [{ startedAt: new Date(), completed: true, finishedAt: new Date() }],
+        feedbacks: [{ id: 'feedback-1' }]
+      }));
+    prisma.trainingMessage.create.mockResolvedValue({ id: 'message-1' });
+
+    await expect(service.saveFeedback(
+      'athlete-user',
+      'day-1',
+      { pse: 9, fatigue: 9, observations: 'Mudança' },
+      {}
+    )).rejects.toBeInstanceOf(BadRequestException);
+
+    await service.addAthleteMessage('athlete-user', 'day-1', 'Resposta do atleta.', {});
+    expect(prisma.trainingMessage.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ message: 'Resposta do atleta.' }) })
+    );
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'TRAINING_MESSAGE_SENT' }));
   });
 
   it('rejects duplicate sections and edits after completion', async () => {

@@ -38,6 +38,12 @@ enum AuthAuditEvent {
   TRAINING_DELETED
   TRAINING_STARTED
   TRAINING_COMPLETED
+  TRAINING_MESSAGE_SENT
+  TRAINING_MANUAL_PRESCRIPTION_CREATED
+  TRAINING_PERCENTAGE_PRESCRIPTION_CREATED
+  TRAINING_PERCENTAGE_CALCULATED
+  TRAINING_PERCENTAGE_WITHOUT_PR
+  PERSONAL_RECORD_CANDIDATE_IDENTIFIED
   TRAINING_ARCHIVED
   FEEDBACK_CREATED
   FEEDBACK_UPDATED
@@ -122,8 +128,10 @@ enum TargetPrExercise {
   SNATCH
   CLEAN
   JERK
+  CLEAN_JERK
   BACK_SQUAT
   FRONT_SQUAT
+  DEADLIFT
 }
 
 model User {
@@ -149,6 +157,7 @@ model User {
   coachAthletes  Athlete[]      @relation("CoachAthletes")
   athleteProfile Athlete?       @relation("AthleteUser")
   coachComments  CoachComment[]
+  trainingMessages TrainingMessage[]
   refreshTokens  RefreshToken[]
   accountCodes   AccountCode[]
   auditLogs      AuthAuditLog[] @relation("LegacyAuditUser")
@@ -260,6 +269,7 @@ model Athlete {
   feedbacks          Feedback[]
   uploadedVideos     UploadedVideo[]
   personalRecords    PersonalRecord[]
+  personalRecordHistory PersonalRecordHistory[]
   fatigueLogs        FatigueLog[]
 
   @@index([coachId])
@@ -300,6 +310,7 @@ model TrainingDay {
   workoutCompletions WorkoutCompletion[]
   feedbacks          Feedback[]
   uploadedVideos     UploadedVideo[]
+  trainingMessages   TrainingMessage[]
   revisions          TrainingRevision[]
 
   @@index([trainingWeekId])
@@ -347,6 +358,7 @@ model TrainingBlock {
 model TrainingSet {
   id                       String            @id @default(uuid())
   trainingBlockId          String            @map("training_block_id")
+  exerciseKey              String?           @map("exercise_key")
   exerciseName             String            @map("exercise_name")
   sets                     Int
   reps                     Int
@@ -354,16 +366,34 @@ model TrainingSet {
   prescribedWeight         Decimal?          @map("prescribed_weight") @db.Decimal(6, 2)
   targetPrExercise         TargetPrExercise? @map("target_pr_exercise")
   calculatedWeightSnapshot Decimal?          @map("calculated_weight_snapshot") @db.Decimal(6, 2)
+  prUpdateEligible         Boolean           @default(false) @map("pr_update_eligible")
   restSeconds              Int?              @map("rest_seconds")
   notes                    String?
   displayOrder             Int               @map("display_order")
   createdAt                DateTime          @default(now()) @map("created_at")
   updatedAt                DateTime          @updatedAt @map("updated_at")
 
-  trainingBlock TrainingBlock @relation(fields: [trainingBlockId], references: [id])
+  trainingBlock TrainingBlock         @relation(fields: [trainingBlockId], references: [id])
+  attempts      TrainingSetAttempt[]
 
   @@index([trainingBlockId])
   @@map("training_sets")
+}
+
+model TrainingSetAttempt {
+  id            String   @id @default(uuid())
+  trainingSetId String   @map("training_set_id")
+  setIndex      Int      @map("set_index")
+  successful    Boolean
+  completedAt   DateTime @default(now()) @map("completed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  trainingSet TrainingSet @relation(fields: [trainingSetId], references: [id])
+
+  @@unique([trainingSetId, setIndex])
+  @@index([trainingSetId])
+  @@map("training_set_attempts")
 }
 
 model ComplexMovement {
@@ -437,6 +467,21 @@ model CoachComment {
   @@map("coach_comments")
 }
 
+model TrainingMessage {
+  id            String   @id @default(uuid())
+  trainingDayId String   @map("training_day_id")
+  senderUserId  String   @map("sender_user_id")
+  message       String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  trainingDay TrainingDay @relation(fields: [trainingDayId], references: [id])
+  sender      User        @relation(fields: [senderUserId], references: [id])
+
+  @@index([trainingDayId, createdAt])
+  @@index([senderUserId, createdAt])
+  @@map("training_messages")
+}
+
 model TrainingRevision {
   id            String                 @id @default(uuid())
   trainingDayId String                 @map("training_day_id")
@@ -480,10 +525,28 @@ model PersonalRecord {
   updatedAt  DateTime               @updatedAt @map("updated_at")
 
   athlete Athlete @relation(fields: [athleteId], references: [id])
+  history PersonalRecordHistory[]
 
   @@unique([athleteId, exercise])
   @@index([athleteId, exercise])
   @@map("personal_records")
+}
+
+model PersonalRecordHistory {
+  id               String                 @id @default(uuid())
+  personalRecordId String                 @map("personal_record_id")
+  athleteId        String                 @map("athlete_id")
+  exercise         PersonalRecordMovement
+  weight           Decimal                @db.Decimal(6, 2)
+  recordDate       DateTime               @map("record_date") @db.Date
+  notes            String?
+  createdAt        DateTime               @default(now()) @map("created_at")
+
+  personalRecord PersonalRecord @relation(fields: [personalRecordId], references: [id])
+  athlete        Athlete        @relation(fields: [athleteId], references: [id])
+
+  @@index([athleteId, exercise, createdAt])
+  @@map("personal_record_history")
 }
 
 model FatigueLog {

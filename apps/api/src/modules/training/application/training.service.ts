@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import {
   AuthAuditEvent,
+  PersonalRecordMovement,
   Prisma,
   TrainingBlockType,
   TrainingRevisionAction,
@@ -13,6 +14,7 @@ import {
 } from '@prisma/client';
 import { AuditService } from '../../../shared/application/audit.service';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
+import { getExerciseConfigByKey } from '../domain/exercise-catalog';
 import { SaveTrainingDayDto } from '../presentation/dto/save-training-day.dto';
 
 type RequestContext = { ipAddress?: string; userAgent?: string };
@@ -70,6 +72,7 @@ export class TrainingService {
     if (existing?.workoutCompletions.some((completion) => completion.completed)) {
       throw new BadRequestException('Completed training cannot be edited.');
     }
+    const preparedSections = await this.prepareSections(input, athlete, trainer, context);
 
     const saved = await this.prisma.$transaction(async (transaction) => {
       const week = await this.findOrCreateWeek(transaction, athlete.id, scheduledDate);
@@ -116,7 +119,7 @@ export class TrainingService {
           deletedAt: null,
           version,
           blocks: {
-            create: input.sections.map((section, sectionIndex) => ({
+            create: preparedSections.map((section, sectionIndex) => ({
               title: sectionLabels[section.type],
               type: this.legacyBlockType(section.type),
               sectionType: section.type,
@@ -124,11 +127,15 @@ export class TrainingService {
               displayOrder: sectionIndex,
               sets: {
                 create: section.exercises.map((exercise, exerciseIndex) => ({
+                  exerciseKey: exercise.exerciseKey,
                   exerciseName: exercise.name.trim(),
                   sets: exercise.sets,
                   reps: exercise.reps,
-                  prescribedWeight: exercise.load,
-                  restSeconds: exercise.restSeconds,
+                  percentage: exercise.percentage,
+                  prescribedWeight: exercise.prescribedWeight,
+                  targetPrExercise: exercise.targetPrExercise,
+                  calculatedWeightSnapshot: exercise.calculatedWeightSnapshot,
+                  prUpdateEligible: exercise.prUpdateEligible,
                   displayOrder: exerciseIndex
                 }))
               }
@@ -153,6 +160,7 @@ export class TrainingService {
     });
 
     await this.recordTrainingEvent(existing ? 'TRAINING_UPDATED' : 'TRAINING_CREATED', trainer, athlete, saved, context);
+    await this.recordPrescriptionAudit(trainer, athlete, saved, preparedSections, context);
     return this.presentDay(saved);
   }
 
@@ -225,9 +233,48 @@ export class TrainingService {
     const section = day.blocks.find((block) => block.id === sectionId);
     if (!section) throw new NotFoundException('Training section not found.');
     if (!section.sets.length) throw new BadRequestException('Empty section does not affect progress.');
+    if (completed && !this.allSectionAttemptsMarked(section)) {
+      throw new BadRequestException('All section sets must be marked as hit or missed before completing the section.');
+    }
     await this.prisma.trainingBlock.update({
       where: { id: sectionId },
       data: { completedAt: completed ? new Date() : null }
+    });
+    return this.findDayById(trainingDayId);
+  }
+
+  async updateSetAttempt(
+    userId: string,
+    trainingDayId: string,
+    trainingSetId: string,
+    setIndex: number,
+    successful: boolean
+  ) {
+    const { day } = await this.requireOwnDay(userId, trainingDayId);
+    if (day.workoutCompletions[0]?.completed) {
+      throw new BadRequestException('Completed training cannot be changed.');
+    }
+    if (!day.workoutCompletions[0]?.startedAt) {
+      throw new BadRequestException('Training must be started before marking set attempts.');
+    }
+    const set = day.blocks.flatMap((block) => block.sets).find((item) => item.id === trainingSetId);
+    if (!set) throw new NotFoundException('Training set not found.');
+    const section = day.blocks.find((block) => block.sets.some((item) => item.id === trainingSetId));
+    if (!section) throw new NotFoundException('Training section not found.');
+    if (setIndex < 1 || setIndex > set.sets) {
+      throw new BadRequestException('Set index is outside the prescribed range.');
+    }
+
+    await this.prisma.trainingSetAttempt.upsert({
+      where: { trainingSetId_setIndex: { trainingSetId, setIndex } },
+      create: { trainingSetId, setIndex, successful },
+      update: { successful, completedAt: new Date() }
+    });
+    await this.prisma.trainingBlock.update({
+      where: { id: section.id },
+      data: {
+        completedAt: this.allSectionAttemptsMarked(section, { trainingSetId, setIndex }) ? new Date() : null
+      }
     });
     return this.findDayById(trainingDayId);
   }
@@ -237,6 +284,12 @@ export class TrainingService {
     const populated = day.blocks.filter((block) => block.sets.length > 0);
     if (!populated.length || populated.some((block) => !block.completedAt)) {
       throw new BadRequestException('All non-empty sections must be completed.');
+    }
+    const incompleteSet = populated
+      .flatMap((block) => block.sets)
+      .some((set) => set.attempts.length < set.sets);
+    if (incompleteSet) {
+      throw new BadRequestException('All prescribed sets must be marked as hit or missed before completion.');
     }
     const now = new Date();
     const startedAt = day.workoutCompletions[0]?.startedAt ?? now;
@@ -266,6 +319,72 @@ export class TrainingService {
       userAgent: context.userAgent,
       metadata: { athleteId: athlete.id, trainingDayId }
     });
+    await this.recordPersonalRecordCandidates(athlete, day, context);
+    return this.findDayById(trainingDayId);
+  }
+
+  async confirmPersonalRecord(
+    userId: string,
+    trainingDayId: string,
+    movement: PersonalRecordMovement,
+    context: RequestContext
+  ) {
+    const { athlete, day } = await this.requireOwnDay(userId, trainingDayId);
+    if (!day.workoutCompletions[0]?.completed) {
+      throw new BadRequestException('Personal record confirmation is available after training completion.');
+    }
+    const candidate = this.possiblePersonalRecords(day).find((item) => item.movement === movement);
+    if (!candidate) {
+      throw new BadRequestException('No personal record candidate found for this movement.');
+    }
+
+    const record = await this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.personalRecord.upsert({
+        where: { athleteId_exercise: { athleteId: athlete.id, exercise: movement } },
+        create: {
+          athleteId: athlete.id,
+          exercise: movement,
+          weight: candidate.candidateWeight,
+          recordDate: day.scheduledDate,
+          notes: `Atualizado automaticamente após treino: ${candidate.exerciseName}.`
+        },
+        update: {
+          weight: candidate.candidateWeight,
+          recordDate: day.scheduledDate,
+          notes: `Atualizado automaticamente após treino: ${candidate.exerciseName}.`
+        }
+      });
+      await transaction.personalRecordHistory.create({
+        data: {
+          personalRecordId: updated.id,
+          athleteId: athlete.id,
+          exercise: movement,
+          weight: candidate.candidateWeight,
+          recordDate: day.scheduledDate,
+          notes: `Atualizado automaticamente após treino: ${candidate.exerciseName}.`
+        }
+      });
+      return updated;
+    });
+
+    await this.audit.record({
+      event: 'PERSONAL_RECORD_UPSERTED',
+      userId,
+      actorUserId: userId,
+      affectedUserId: userId,
+      description: `Atleta ${athlete.user.fullName} confirmou novo PR de ${candidate.label} pelo treino.`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      metadata: {
+        athleteId: athlete.id,
+        trainingDayId,
+        personalRecordId: record.id,
+        movement,
+        previousWeight: candidate.currentPr,
+        weight: candidate.candidateWeight,
+        exerciseName: candidate.exerciseName
+      }
+    });
     return this.findDayById(trainingDayId);
   }
 
@@ -279,33 +398,65 @@ export class TrainingService {
     if (!day.workoutCompletions[0]?.completed) {
       throw new BadRequestException('Feedback is available after training completion.');
     }
-    const existing = day.feedbacks[0];
-    const feedback = await this.prisma.feedback.upsert({
-      where: { athleteId_trainingDayId: { athleteId: athlete.id, trainingDayId } },
-      create: {
-        athleteId: athlete.id,
-        trainingDayId,
-        rpe: input.pse,
-        fatigue: input.fatigue,
-        comment: input.observations?.trim() || null
-      },
-      update: {
-        rpe: input.pse,
-        fatigue: input.fatigue,
-        comment: input.observations?.trim() || null
+    if (day.feedbacks[0]) {
+      throw new BadRequestException('Feedback already submitted.');
+    }
+    const feedback = await this.prisma.$transaction(async (transaction) => {
+      const created = await transaction.feedback.create({
+        data: {
+          athleteId: athlete.id,
+          trainingDayId,
+          rpe: input.pse,
+          fatigue: input.fatigue,
+          comment: input.observations?.trim() || null
+        }
+      });
+      if (input.observations?.trim()) {
+        await transaction.trainingMessage.create({
+          data: {
+            trainingDayId,
+            senderUserId: userId,
+            message: input.observations.trim()
+          }
+        });
       }
+      return created;
     });
     await this.audit.record({
-      event: existing ? 'FEEDBACK_UPDATED' : 'FEEDBACK_CREATED',
+      event: 'FEEDBACK_CREATED',
       userId,
       actorUserId: userId,
       affectedUserId: userId,
-      description: `Atleta ${athlete.user.fullName} ${existing ? 'atualizou' : 'enviou'} o feedback do treino.`,
+      description: `Atleta ${athlete.user.fullName} enviou o feedback do treino.`,
       ipAddress: context.ipAddress,
       userAgent: context.userAgent,
       metadata: { athleteId: athlete.id, trainingDayId, pse: input.pse, fatigue: input.fatigue }
     });
     return feedback;
+  }
+
+  async addAthleteMessage(
+    userId: string,
+    trainingDayId: string,
+    message: string,
+    context: RequestContext
+  ) {
+    const { athlete, day } = await this.requireOwnDay(userId, trainingDayId);
+    if (!day.feedbacks[0]) {
+      throw new BadRequestException('Initial feedback is required before session messages.');
+    }
+    const created = await this.createTrainingMessage(userId, trainingDayId, message);
+    await this.audit.record({
+      event: 'TRAINING_MESSAGE_SENT',
+      userId,
+      actorUserId: userId,
+      affectedUserId: userId,
+      description: `Atleta ${athlete.user.fullName} enviou uma mensagem sobre o treino.`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      metadata: { athleteId: athlete.id, trainingDayId }
+    });
+    return created;
   }
 
   async addCoachComment(
@@ -328,9 +479,7 @@ export class TrainingService {
     }
     const feedback = day.feedbacks[0];
     if (!feedback) throw new BadRequestException('Athlete feedback is required before commenting.');
-    const created = await this.prisma.coachComment.create({
-      data: { coachId: trainer.id, feedbackId: feedback.id, comment: comment.trim() }
-    });
+    const created = await this.createTrainingMessage(trainer.id, trainingDayId, comment);
     await this.audit.record({
       event: 'COACH_COMMENT_ADDED',
       userId: trainer.id,
@@ -342,6 +491,16 @@ export class TrainingService {
       metadata: { athleteId: athlete.id, trainingDayId }
     });
     return created;
+  }
+
+  private createTrainingMessage(senderUserId: string, trainingDayId: string, message: string) {
+    return this.prisma.trainingMessage.create({
+      data: {
+        trainingDayId,
+        senderUserId,
+        message: message.trim()
+      }
+    });
   }
 
   private async calendar(athleteId: string, month: string) {
@@ -400,7 +559,12 @@ export class TrainingService {
   private dayInclude() {
     return {
       blocks: {
-        include: { sets: { orderBy: { displayOrder: 'asc' as const } } },
+        include: {
+          sets: {
+            include: { attempts: { orderBy: { setIndex: 'asc' as const } } },
+            orderBy: { displayOrder: 'asc' as const }
+          }
+        },
         orderBy: { displayOrder: 'asc' as const }
       },
       workoutCompletions: true,
@@ -409,6 +573,20 @@ export class TrainingService {
           coachComments: {
             include: { coach: { select: { id: true, fullName: true } } },
             orderBy: { createdAt: 'asc' as const }
+          }
+        }
+      },
+      trainingMessages: {
+        include: { sender: { select: { id: true, fullName: true, role: true } } },
+        orderBy: { createdAt: 'asc' as const }
+      },
+      trainingWeek: {
+        include: {
+          athlete: {
+            include: {
+              personalRecords: true,
+              user: { select: { id: true, fullName: true } }
+            }
           }
         }
       },
@@ -440,11 +618,24 @@ export class TrainingService {
         completedAt: block.completedAt,
         exercises: block.sets.map((set) => ({
           id: set.id,
+          exerciseKey: set.exerciseKey,
           name: set.exerciseName,
           sets: set.sets,
           reps: set.reps,
           load: set.prescribedWeight === null ? null : Number(set.prescribedWeight),
-          restSeconds: set.restSeconds
+          percentage: set.percentage === null ? null : Number(set.percentage),
+          targetPrExercise: set.targetPrExercise,
+          prBaseLabel: set.targetPrExercise ? this.movementLabel(set.targetPrExercise as PersonalRecordMovement) : null,
+          calculatedWeight: set.calculatedWeightSnapshot === null ? null : Number(set.calculatedWeightSnapshot),
+          attempts: Array.from({ length: set.sets }, (_, index) => {
+            const setIndex = index + 1;
+            const attempt = set.attempts.find((item) => item.setIndex === setIndex);
+            return {
+              setIndex,
+              successful: attempt?.successful ?? null,
+              completedAt: attempt?.completedAt ?? null
+            };
+          })
         }))
       })),
       feedback: day.feedbacks[0]
@@ -463,6 +654,13 @@ export class TrainingService {
             }))
           }
         : null,
+      messages: day.trainingMessages.map((message) => ({
+        id: message.id,
+        message: message.message,
+        createdAt: message.createdAt,
+        sender: message.sender
+      })),
+      possiblePersonalRecords: completion?.completed ? this.possiblePersonalRecords(day) : [],
       history: day.revisions.map((revision) => ({
         id: revision.id,
         version: revision.version,
@@ -476,7 +674,7 @@ export class TrainingService {
   private async requireTrainerAthlete(trainerId: string, athleteId: string, context: RequestContext) {
     const athlete = await this.prisma.athlete.findUnique({
       where: { id: athleteId },
-      include: { user: true }
+      include: { user: true, personalRecords: true }
     });
     if (!athlete) throw new NotFoundException('Athlete not found.');
     if (athlete.coachId !== trainerId) {
@@ -488,7 +686,7 @@ export class TrainingService {
   private async requireAthleteUser(userId: string) {
     const athlete = await this.prisma.athlete.findUnique({
       where: { userId },
-      include: { user: true }
+      include: { user: true, personalRecords: true }
     });
     if (!athlete) throw new NotFoundException('Athlete not found.');
     return athlete;
@@ -526,6 +724,236 @@ export class TrainingService {
     throw new ForbiddenException('Training does not belong to authenticated user.');
   }
 
+  private async prepareSections(
+    input: SaveTrainingDayDto,
+    athlete: {
+      id: string;
+      userId: string;
+      personalRecords: { exercise: PersonalRecordMovement; weight: Prisma.Decimal | number | string }[];
+    },
+    trainer: Actor,
+    context: RequestContext
+  ) {
+    return Promise.all(input.sections.map(async (section) => ({
+      ...section,
+      exercises: await Promise.all(section.exercises.map(async (exercise) => {
+        const mode = exercise.mode ?? (exercise.percentage ? 'PERCENTAGE' : 'MANUAL');
+        const exerciseConfig = getExerciseConfigByKey(exercise.exerciseKey);
+        const targetPrExercise = exerciseConfig?.targetPrExercise ?? null;
+        const prUpdateEligible = Boolean(exerciseConfig?.canUpdatePersonalRecord);
+        const exerciseName = exerciseConfig?.name ?? exercise.name;
+
+        if (mode === 'MANUAL') {
+          return {
+            ...exercise,
+            exerciseKey: exerciseConfig?.key ?? exercise.exerciseKey ?? null,
+            name: exerciseName,
+            percentage: null,
+            prescribedWeight: exercise.load ?? null,
+            calculatedWeightSnapshot: null,
+            targetPrExercise,
+            prUpdateEligible
+          };
+        }
+
+        if (!exerciseConfig) {
+          await this.audit.record({
+            event: 'TRAINING_PERCENTAGE_WITHOUT_PR',
+            userId: trainer.id,
+            actorUserId: trainer.id,
+            affectedUserId: athlete.userId,
+            result: 'FAILURE',
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            description: `Treinador ${trainer.fullName} tentou prescrever exercício não configurado por porcentagem.`,
+            metadata: { athleteId: athlete.id, exerciseKey: exercise.exerciseKey, exerciseName: exercise.name }
+          });
+          throw new BadRequestException('Exercise must be selected from the configured catalog for percentage prescription.');
+        }
+        if (exerciseConfig.prBase === 'NONE' || !targetPrExercise) {
+          await this.audit.record({
+            event: 'TRAINING_PERCENTAGE_WITHOUT_PR',
+            userId: trainer.id,
+            actorUserId: trainer.id,
+            affectedUserId: athlete.userId,
+            result: 'FAILURE',
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            description: `Treinador ${trainer.fullName} tentou prescrever ${exerciseConfig.name} por porcentagem sem PR base configurado.`,
+            metadata: { athleteId: athlete.id, exerciseKey: exerciseConfig.key, exerciseName: exerciseConfig.name, prBase: exerciseConfig.prBase }
+          });
+          throw new BadRequestException(`Exercise ${exerciseConfig.name} does not have a PR base configured.`);
+        }
+
+        const record = athlete.personalRecords.find(
+          (personalRecord) => personalRecord.exercise === exerciseConfig.prBase
+        );
+        if (!record) {
+          await this.audit.record({
+            event: 'TRAINING_PERCENTAGE_WITHOUT_PR',
+            userId: trainer.id,
+            actorUserId: trainer.id,
+            affectedUserId: athlete.userId,
+            result: 'FAILURE',
+            ipAddress: context.ipAddress,
+            userAgent: context.userAgent,
+            description: `Treinador ${trainer.fullName} tentou prescrever ${exerciseConfig.name} por porcentagem sem PR cadastrado.`,
+            metadata: { athleteId: athlete.id, exerciseKey: exerciseConfig.key, exerciseName: exerciseConfig.name, targetPrExercise }
+          });
+          throw new BadRequestException(`No personal record registered for ${this.movementLabel(exerciseConfig.prBase)}.`);
+        }
+        if (!exercise.percentage) {
+          throw new BadRequestException('Percentage is required for percentage prescription.');
+        }
+
+        const calculatedWeight = this.roundWeight(
+          (Number(record.weight) * Number(exercise.percentage)) / 100
+        );
+        return {
+          ...exercise,
+          exerciseKey: exerciseConfig.key,
+          name: exerciseConfig.name,
+          load: undefined,
+          prescribedWeight: calculatedWeight,
+          calculatedWeightSnapshot: calculatedWeight,
+          targetPrExercise,
+          percentage: exercise.percentage,
+          prUpdateEligible
+        };
+      }))
+    })));
+  }
+
+  private async recordPrescriptionAudit(
+    trainer: Actor,
+    athlete: { id: string; userId: string; user: { fullName: string } },
+    day: { id: string; scheduledDate: Date },
+    sections: Awaited<ReturnType<TrainingService['prepareSections']>>,
+    context: RequestContext
+  ) {
+    const exercises = sections.flatMap((section) => section.exercises);
+    const hasManual = exercises.some((exercise) => !exercise.percentage);
+    const percentageExercises = exercises.filter((exercise) => exercise.percentage);
+    if (hasManual) {
+      await this.audit.record({
+        event: 'TRAINING_MANUAL_PRESCRIPTION_CREATED',
+        userId: trainer.id,
+        actorUserId: trainer.id,
+        affectedUserId: athlete.userId,
+        description: `Treinador ${trainer.fullName} criou prescrição manual para ${athlete.user.fullName}.`,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        metadata: { athleteId: athlete.id, trainingDayId: day.id }
+      });
+    }
+    if (percentageExercises.length) {
+      await this.audit.record({
+        event: 'TRAINING_PERCENTAGE_PRESCRIPTION_CREATED',
+        userId: trainer.id,
+        actorUserId: trainer.id,
+        affectedUserId: athlete.userId,
+        description: `Treinador ${trainer.fullName} criou prescrição por porcentagem para ${athlete.user.fullName}.`,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        metadata: { athleteId: athlete.id, trainingDayId: day.id, count: percentageExercises.length }
+      });
+      await this.audit.record({
+        event: 'TRAINING_PERCENTAGE_CALCULATED',
+        userId: trainer.id,
+        actorUserId: trainer.id,
+        affectedUserId: athlete.userId,
+        description: `Sistema calculou cargas por PR para ${athlete.user.fullName}.`,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        metadata: {
+          athleteId: athlete.id,
+          trainingDayId: day.id,
+          exercises: percentageExercises.map((exercise) => ({
+            name: exercise.name,
+            percentage: exercise.percentage,
+            calculatedWeight: exercise.calculatedWeightSnapshot,
+            targetPrExercise: exercise.targetPrExercise
+          }))
+        }
+      });
+    }
+  }
+
+  private async recordPersonalRecordCandidates(
+    athlete: {
+      id: string;
+      userId: string;
+      user: { fullName: string };
+      personalRecords: { exercise: PersonalRecordMovement; weight: Prisma.Decimal | number | string }[];
+    },
+    day: Awaited<ReturnType<TrainingService['rawDay']>> & {},
+    context: RequestContext
+  ) {
+    const candidates = this.possiblePersonalRecords(day);
+    for (const candidate of candidates) {
+      await this.audit.record({
+        event: 'PERSONAL_RECORD_CANDIDATE_IDENTIFIED',
+        userId: athlete.userId,
+        actorUserId: athlete.userId,
+        affectedUserId: athlete.userId,
+        description: `Possível novo PR identificado para ${athlete.user.fullName} em ${candidate.label}.`,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        metadata: { athleteId: athlete.id, trainingDayId: day.id, ...candidate }
+      });
+    }
+  }
+
+  private possiblePersonalRecords(day: Awaited<ReturnType<TrainingService['rawDay']>> & {}) {
+    const records = new Map(
+      day.trainingWeek.athlete.personalRecords.map((record) => [
+        record.exercise,
+        Number(record.weight)
+      ])
+    );
+    const byMovement = new Map<PersonalRecordMovement, {
+      movement: PersonalRecordMovement;
+      label: string;
+      currentPr: number;
+      candidateWeight: number;
+      exerciseName: string;
+    }>();
+    for (const block of day.blocks) {
+      for (const set of block.sets) {
+        if (!set.prUpdateEligible || !set.targetPrExercise) continue;
+        if (!set.attempts.some((attempt) => attempt.successful)) continue;
+        const movement = set.targetPrExercise as PersonalRecordMovement;
+        const currentPr = records.get(movement);
+        const candidateWeight = Number(set.calculatedWeightSnapshot ?? set.prescribedWeight ?? 0);
+        if (!currentPr || candidateWeight <= currentPr) continue;
+        const existing = byMovement.get(movement);
+        if (!existing || candidateWeight > existing.candidateWeight) {
+          byMovement.set(movement, {
+            movement,
+            label: this.movementLabel(movement),
+            currentPr,
+            candidateWeight,
+            exerciseName: set.exerciseName
+          });
+        }
+      }
+    }
+    return [...byMovement.values()];
+  }
+
+  private movementLabel(movement: PersonalRecordMovement) {
+    return movement
+      .toLowerCase()
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+      .replace('Clean Jerk', 'Clean & Jerk');
+  }
+
+  private roundWeight(value: number) {
+    return Math.round(value * 100) / 100;
+  }
+
   private async findOrCreateWeek(
     transaction: Prisma.TransactionClient,
     athleteId: string,
@@ -558,6 +986,24 @@ export class TrainingService {
     const populated = blocks.filter((block) => block.sets.length > 0);
     if (!populated.length) return 0;
     return Math.round((populated.filter((block) => block.completedAt).length / populated.length) * 100);
+  }
+
+  private allSectionAttemptsMarked(
+    section: {
+      sets: {
+        id: string;
+        sets: number;
+        attempts: { setIndex: number }[];
+      }[];
+    },
+    pendingAttempt?: { trainingSetId: string; setIndex: number }
+  ) {
+    return section.sets.length > 0 && section.sets.every((set) =>
+      Array.from({ length: set.sets }, (_, index) => index + 1).every((setIndex) =>
+        set.attempts.some((attempt) => attempt.setIndex === setIndex) ||
+        (pendingAttempt?.trainingSetId === set.id && pendingAttempt.setIndex === setIndex)
+      )
+    );
   }
 
   private status(date: Date, completed?: boolean) {

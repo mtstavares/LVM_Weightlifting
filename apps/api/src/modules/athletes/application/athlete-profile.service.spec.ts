@@ -67,8 +67,13 @@ describe('AthleteProfileService', () => {
       },
       personalRecord: {
         findMany: jest.fn(),
-        upsert: jest.fn()
-      }
+        upsert: jest.fn(),
+        findUniqueOrThrow: jest.fn()
+      },
+      personalRecordHistory: { create: jest.fn() },
+      $transaction: jest.fn(async (input: any) =>
+        typeof input === 'function' ? input(prisma) : Promise.all(input)
+      )
     };
     storage = {
       upload: jest.fn().mockResolvedValue({
@@ -214,6 +219,7 @@ describe('AthleteProfileService', () => {
     await expect(service.listOwnPersonalRecords(profile.userId)).resolves.toEqual([record]);
 
     prisma.personalRecord.upsert.mockResolvedValue(record);
+    prisma.personalRecord.findUniqueOrThrow.mockResolvedValue(record);
     await expect(
       service.upsertOwnPersonalRecord(
         profile.userId,
@@ -224,6 +230,11 @@ describe('AthleteProfileService', () => {
     expect(prisma.personalRecord.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { athleteId_exercise: { athleteId: profile.id, exercise: 'SNATCH' } }
+      })
+    );
+    expect(prisma.personalRecordHistory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ athleteId: profile.id, exercise: 'SNATCH', weight: 100 })
       })
     );
     expect(audit.record).toHaveBeenCalledWith(

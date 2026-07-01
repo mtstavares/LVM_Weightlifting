@@ -22,6 +22,13 @@ export type PersonalRecord = {
   recordDate: string;
   notes: string | null;
   updatedAt: string;
+  history?: {
+    id: string;
+    weight: string;
+    recordDate: string;
+    notes: string | null;
+    createdAt: string;
+  }[];
 };
 
 export type AthleteProfile = {
