@@ -12,7 +12,9 @@
     "prisma:generate": "node scripts/prisma.mjs generate",
     "prisma:migrate": "node scripts/prisma.mjs migrate deploy",
     "prisma:migrate:dev": "node scripts/prisma.mjs migrate dev",
-    "prisma:seed": "node scripts/prisma.mjs db seed"
+    "prisma:seed": "node scripts/prisma.mjs db seed",
+    "seed:test-accounts": "node scripts/seed-test-accounts.mjs",
+    "seed:test-accounts:force": "node scripts/seed-test-accounts.mjs --force"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.27",

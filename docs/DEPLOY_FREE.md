@@ -612,3 +612,37 @@ Para teste gratuito, o sistema fica utilizavel. Antes de clientes pagantes, reco
 - API em plano que nao hiberna;
 - politica de retencao de logs;
 - pipeline de deploy com ambiente staging.
+
+## Criar contas de teste manualmente
+
+Existe um seed opcional para criar contas de teste diretamente no banco configurado na API.
+
+Contas criadas:
+
+- `treinador1@teste.local` / `Senha123!`
+- `treinador2@teste.local` / `Senha123!`
+- `aluno1@teste.local` / `Senha123!`
+- `aluno2@teste.local` / `Senha123!`
+- `aluno3@teste.local` / `Senha123!`
+- `aluno4@teste.local` / `Senha123!`
+
+Vinculos:
+
+- Aluno 1 e Aluno 2 ficam vinculados ao Treinador 1.
+- Aluno 3 e Aluno 4 ficam vinculados ao Treinador 2.
+
+Para criar no Render:
+
+1. Abra o servico da API no Render.
+2. Va em `Environment`.
+3. Adicione:
+
+```bash
+SEED_TEST_ACCOUNTS=true
+```
+
+4. Faca `Manual Deploy`.
+5. Depois que aparecer o JSON das contas nos logs, remova a variavel `SEED_TEST_ACCOUNTS` ou altere para `false`.
+6. Faca outro redeploy para evitar resetar a senha dessas contas em todo deploy.
+
+O script e idempotente: se as contas ja existirem, ele atualiza senha, status e vinculos.

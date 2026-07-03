@@ -14,7 +14,7 @@
     "build": "npm run build --workspaces",
     "build:api": "npm run prisma:generate -w @lvm/api && npm run build -w @lvm/api",
     "build:web": "npm run build -w @lvm/web",
-    "start:api:prod": "npm run prisma:migrate -w @lvm/api && npm run prisma:seed -w @lvm/api && npm run start -w @lvm/api",
+    "start:api:prod": "npm run prisma:migrate -w @lvm/api && npm run prisma:seed -w @lvm/api && npm run seed:test-accounts -w @lvm/api && npm run start -w @lvm/api",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspaces",
     "typecheck": "npm run typecheck --workspaces",
