@@ -10,6 +10,9 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "test": "vitest run --coverage"
   },
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
     "@lvm/shared": "*",

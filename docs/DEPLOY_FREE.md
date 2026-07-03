@@ -257,7 +257,7 @@ O arquivo `apps/web/vercel.json` ja define:
 - framework: Next.js;
 - install: `cd ../.. && npm install`;
 - build: `cd ../.. && npm run build:web`;
-- output: `.next`.
+- output gerenciado automaticamente pela Vercel.
 
 Se a Vercel pedir configuracao manual, use:
 
@@ -281,13 +281,11 @@ cd ../.. && npm install
 cd ../.. && npm run build:web
 ```
 
-- Output Directory:
-
-```bash
-.next
-```
+- Output Directory: deixe em branco. Para Next.js, a Vercel gerencia a saida automaticamente.
 
 Importante: se o Root Directory ficar na raiz do repositorio, a Vercel pode falhar com `No Next.js version detected`, porque o `next` esta no `apps/web/package.json`, nao no `package.json` da raiz.
+
+Importante: nao configure `.next` manualmente como Output Directory. Isso pode causar `No entrypoint found in output directory: ".next"`.
 
 ### 5.3 Variaveis do frontend na Vercel
 
