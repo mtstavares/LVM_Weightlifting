@@ -8,7 +8,7 @@ Este roteiro deixa o SaaS funcional na web usando GitHub, Neon, Render, Vercel e
 - Seed mantendo apenas exercicios padrao do sistema.
 - `.gitignore` bloqueando `.env`, uploads locais, outbox de e-mails, builds, caches e dependencias.
 - `render.yaml` para facilitar criacao da API no Render.
-- `vercel.json` para publicar o frontend Next.js em monorepo.
+- `apps/web/vercel.json` para publicar o frontend Next.js dentro do monorepo.
 - `.env.production.example` com todas as variaveis necessarias, sem secrets reais.
 - Scripts:
   - `npm run build:api`
@@ -252,34 +252,42 @@ Se demorar, aguarde. Render Free pode hibernar.
 
 ### 5.2 Configuracao do projeto
 
-O arquivo `vercel.json` ja define:
+O arquivo `apps/web/vercel.json` ja define:
 
 - framework: Next.js;
-- install: `npm install`;
-- build: `npm run build:web`;
-- output: `apps/web/.next`.
+- install: `cd ../.. && npm install`;
+- build: `cd ../.. && npm run build:web`;
+- output: `.next`.
 
 Se a Vercel pedir configuracao manual, use:
 
 - Framework Preset: `Next.js`
-- Root Directory: deixe como raiz do repositorio.
+- Root Directory:
+
+```bash
+apps/web
+```
+
+- Node.js Version: `22.x`
 - Install Command:
 
 ```bash
-npm install
+cd ../.. && npm install
 ```
 
 - Build Command:
 
 ```bash
-npm run build:web
+cd ../.. && npm run build:web
 ```
 
 - Output Directory:
 
 ```bash
-apps/web/.next
+.next
 ```
+
+Importante: se o Root Directory ficar na raiz do repositorio, a Vercel pode falhar com `No Next.js version detected`, porque o `next` esta no `apps/web/package.json`, nao no `package.json` da raiz.
 
 ### 5.3 Variaveis do frontend na Vercel
 
