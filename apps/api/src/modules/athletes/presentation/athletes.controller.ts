@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { PersonalRecordMovement } from '@prisma/client';
 import { memoryStorage } from 'multer';
 import { AthletesService } from '../application/athletes.service';
@@ -72,6 +73,7 @@ export class AthletesController {
 
   @Put('me/profile/complete')
   @Roles('ATHLETE')
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
   @UseInterceptors(
     FileInterceptor('photo', {
       storage: memoryStorage(),
@@ -91,6 +93,7 @@ export class AthletesController {
 
   @Patch('me/profile')
   @Roles('ATHLETE')
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
   @UseGuards(ProfileCompletedGuard)
   @UseInterceptors(
     FileInterceptor('photo', {

@@ -16,6 +16,10 @@ Sprints 3 a 6 concluidas: gestao de atletas, calendario de treinos, prescricao, 
 6. Execute `npm run prisma:seed`.
 7. Execute `npm run dev`.
 
+## Deploy gratuito
+
+Para publicar uma versão de teste sem custo mensal, use o guia em `docs/DEPLOY_FREE.md`.
+
 Servicos locais:
 
 - Web: `http://localhost:3000`

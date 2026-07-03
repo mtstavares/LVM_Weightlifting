@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import { useState } from 'react';
@@ -16,20 +16,21 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-5">
-      <section className="w-full max-w-md rounded-md border border-border bg-white p-6">
-        <h1 className="text-xl font-semibold">Recuperar acesso</h1>
+      <section className="w-full max-w-md rounded-3xl border border-border bg-surface p-6 shadow-premium">
+        <p className="eyebrow">Acesso</p>
+        <h1 className="mt-3 text-2xl font-semibold">Recuperar acesso</h1>
         <p className="mt-2 text-sm leading-6 text-muted">Informe o e-mail da sua conta.</p>
         {sent ? (
-          <div className="mt-6 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            Se o e-mail estiver cadastrado, enviaremos as instrucoes de recuperacao.
+          <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            Se o e-mail estiver cadastrado, enviaremos as instruções de recuperação.
           </div>
         ) : (
           <form className="mt-6 space-y-4" onSubmit={submit}>
             <input className="input" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
-            <button className="h-11 w-full rounded-md bg-primary text-sm font-semibold text-white" type="submit">Enviar instrucoes</button>
+            <button className="btn-primary w-full" type="submit">Enviar instruções</button>
           </form>
         )}
-        <Link className="mt-5 block text-center text-sm font-medium text-primary hover:underline" href="/login">Voltar ao login</Link>
+        <Link className="mt-5 block text-center text-sm font-semibold text-primary hover:underline" href="/login">Voltar ao login</Link>
       </section>
     </main>
   );

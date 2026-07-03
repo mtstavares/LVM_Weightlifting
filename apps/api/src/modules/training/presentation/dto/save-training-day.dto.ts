@@ -15,7 +15,7 @@ import {
 } from 'class-validator';
 import { TrainingSectionType } from '@prisma/client';
 
-export type PrescriptionMode = 'MANUAL' | 'PERCENTAGE';
+export type PrescriptionMode = 'MANUAL' | 'PERCENTAGE' | 'PERCENTAGE_RANGE' | 'TIME' | 'TEXT';
 
 class TrainingExerciseDto {
   @IsOptional()
@@ -38,7 +38,7 @@ class TrainingExerciseDto {
   reps!: number;
 
   @IsOptional()
-  @IsIn(['MANUAL', 'PERCENTAGE'])
+  @IsIn(['MANUAL', 'PERCENTAGE', 'PERCENTAGE_RANGE', 'TIME', 'TEXT'])
   mode?: PrescriptionMode;
 
   @IsOptional()
@@ -51,6 +51,23 @@ class TrainingExerciseDto {
   @Min(1)
   @Max(1000)
   percentage?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(1000)
+  percentageEnd?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(600)
+  durationMinutes?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
 }
 
 class TrainingSectionDto {

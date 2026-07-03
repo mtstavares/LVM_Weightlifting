@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -22,7 +22,7 @@ export default function ProfilePage() {
     void (async () => {
       try {
         const user = await getCurrentUser();
-        if (user.role !== 'ATHLETE') return router.replace('/dashboard');
+        if (user.role !== 'ATHLETE') return router.replace('/athlete/training');
         if (!user.profileComplete) return router.replace('/complete-profile');
         setProfile(await getOwnProfile());
       } catch {
@@ -36,21 +36,21 @@ export default function ProfilePage() {
 
   return (
     <main className="min-h-screen bg-background px-5 py-8">
-      <section className="mx-auto max-w-3xl rounded-md border border-border bg-white p-6">
-        <button className="mb-5 flex items-center gap-2 text-sm text-primary" onClick={() => router.push('/dashboard')} type="button">
-          <ArrowLeft size={16} />Voltar
+      <section className="mx-auto max-w-3xl rounded-3xl border border-border bg-surface p-6 shadow-premium">
+        <button className="mb-5 flex items-center gap-2 text-sm font-semibold text-primary" onClick={() => router.push('/athlete/profile')} type="button">
+          <ArrowLeft size={16} />Voltar ao perfil
         </button>
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           {photo ? (
-            <img alt={profile.fullName} className="h-20 w-20 rounded-full object-cover" src={photo} />
+            <img alt={profile.fullName} className="h-24 w-24 rounded-3xl border border-primary/30 object-cover" src={photo} />
           ) : (
-            <div className="h-20 w-20 rounded-full bg-slate-200" />
+            <div className="h-24 w-24 rounded-3xl border border-border bg-sidebar" />
           )}
           <div>
             <h1 className="text-2xl font-semibold">{profile.fullName}</h1>
             <p className="mt-1 text-sm text-muted">{profile.email}</p>
-            <p className="mt-1 text-sm">
+            <p className="mt-1 text-sm text-muted">
               {profile.weightCategory ? `${profile.weightCategory} kg` : 'Categoria não informada'}
             </p>
           </div>
@@ -81,7 +81,7 @@ export default function ProfilePage() {
                 await updateProfile(input, selectedPhoto);
                 setProfile(await getOwnProfile());
                 setFeedback('success');
-                window.setTimeout(() => router.push('/dashboard'), 1200);
+                window.setTimeout(() => router.push('/athlete/profile'), 1200);
               } catch {
                 setFeedback('error');
                 throw new Error('profile-update-failed');

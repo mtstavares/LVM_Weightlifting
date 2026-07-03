@@ -134,20 +134,15 @@ export class AuthController {
         response
       );
     } catch (error) {
-      if (error instanceof InvalidCredentialsError) {
-        throw new UnauthorizedException('Invalid credentials.');
+      if (
+        error instanceof InvalidCredentialsError ||
+        error instanceof EmailNotVerifiedError ||
+        error instanceof TemporaryPasswordExpiredError
+      ) {
+        throw new UnauthorizedException('Não foi possível entrar. Verifique seus dados ou siga as instruções enviadas para o e-mail.');
       }
-      if (error instanceof EmailNotVerifiedError) {
-        throw new UnauthorizedException('Email verification required.');
-      }
-      if (error instanceof AccountInactiveError) {
-        throw new ForbiddenException('Conta indisponivel. Entre em contato com seu treinador.');
-      }
-      if (error instanceof AccountLockedError) {
-        throw new ForbiddenException('Account is temporarily locked.');
-      }
-      if (error instanceof TemporaryPasswordExpiredError) {
-        throw new UnauthorizedException('Temporary password is expired or already used.');
+      if (error instanceof AccountInactiveError || error instanceof AccountLockedError) {
+        throw new ForbiddenException('Conta indisponível. Entre em contato com o responsável pela conta.');
       }
       throw error;
     }
@@ -161,6 +156,7 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   async changePassword(
@@ -192,6 +188,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth('refresh_token')
   async refresh(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
@@ -207,6 +204,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @HttpCode(HttpStatus.NO_CONTENT)
   async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     await this.auth.logout(request.cookies?.refresh_token);

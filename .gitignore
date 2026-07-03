@@ -5,9 +5,11 @@
 .env
 .env.*
 !.env.example
+!.env*.example
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env*.example
 
 # Build output and framework caches
 **/dist/
@@ -39,10 +41,12 @@ pnpm-debug.log*
 storage/videos/*
 storage/photos/*
 storage/exercises/*
+storage/feed/*
 storage/mail-outbox/*
 !storage/videos/.gitkeep
 !storage/photos/.gitkeep
 !storage/exercises/.gitkeep
+!storage/feed/.gitkeep
 !storage/mail-outbox/.gitkeep
 
 # IDE and editor settings

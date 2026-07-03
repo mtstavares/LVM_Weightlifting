@@ -6,19 +6,21 @@ import {
 } from '@nestjs/common';
 import {
   AuthAuditEvent,
+  Exercise,
   PersonalRecordMovement,
   Prisma,
   TrainingBlockType,
   TrainingRevisionAction,
-  TrainingSectionType
+  TrainingSectionType,
+  TargetPrExercise
 } from '@prisma/client';
 import { AuditService } from '../../../shared/application/audit.service';
 import { PrismaService } from '../../../shared/infrastructure/prisma/prisma.service';
-import { getExerciseConfigByKey } from '../domain/exercise-catalog';
 import { SaveTrainingDayDto } from '../presentation/dto/save-training-day.dto';
 
 type RequestContext = { ipAddress?: string; userAgent?: string };
 type Actor = { id: string; fullName: string };
+type ExerciseConfig = Pick<Exercise, 'key' | 'name' | 'category' | 'prescriptionType' | 'prBase' | 'canUpdatePersonalRecord'>;
 
 const sectionLabels: Record<TrainingSectionType, string> = {
   WARMUP: 'Aquecimento',
@@ -129,13 +131,21 @@ export class TrainingService {
                 create: section.exercises.map((exercise, exerciseIndex) => ({
                   exerciseKey: exercise.exerciseKey,
                   exerciseName: exercise.name.trim(),
+                  exerciseCategorySnapshot: exercise.exerciseCategory,
+                  prescriptionTypeSnapshot: exercise.prescriptionType,
+                  prBaseSnapshot: exercise.prBase,
                   sets: exercise.sets,
                   reps: exercise.reps,
                   percentage: exercise.percentage,
+                  percentageEnd: exercise.percentageEnd ?? null,
                   prescribedWeight: exercise.prescribedWeight,
                   targetPrExercise: exercise.targetPrExercise,
                   calculatedWeightSnapshot: exercise.calculatedWeightSnapshot,
+                  calculatedWeightEndSnapshot: exercise.calculatedWeightEndSnapshot ?? null,
+                  durationMinutes: exercise.durationMinutes ?? null,
+                  notes: exercise.notes?.trim() || null,
                   prUpdateEligible: exercise.prUpdateEligible,
+                  prCandidateDeclinedWeight: null,
                   displayOrder: exerciseIndex
                 }))
               }
@@ -364,11 +374,19 @@ export class TrainingService {
           notes: `Atualizado automaticamente após treino: ${candidate.exerciseName}.`
         }
       });
+      await transaction.trainingSet.updateMany({
+        where: {
+          trainingBlock: { trainingDayId },
+          targetPrExercise: movement,
+          prUpdateEligible: true
+        },
+        data: { prCandidateDeclinedWeight: null }
+      });
       return updated;
     });
 
     await this.audit.record({
-      event: 'PERSONAL_RECORD_UPSERTED',
+      event: 'PERSONAL_RECORD_UPDATE_CONFIRMED',
       userId,
       actorUserId: userId,
       affectedUserId: userId,
@@ -385,6 +403,51 @@ export class TrainingService {
         exerciseName: candidate.exerciseName
       }
     });
+    return this.findDayById(trainingDayId);
+  }
+
+  async declinePersonalRecord(
+    userId: string,
+    trainingDayId: string,
+    movement: PersonalRecordMovement,
+    context: RequestContext
+  ) {
+    const { athlete, day } = await this.requireOwnDay(userId, trainingDayId);
+    if (!day.workoutCompletions[0]?.completed) {
+      throw new BadRequestException('Personal record decision is available after training completion.');
+    }
+    const candidate = this.possiblePersonalRecords(day).find((item) => item.movement === movement);
+    if (!candidate) {
+      throw new BadRequestException('No personal record candidate found for this movement.');
+    }
+
+    await this.prisma.trainingSet.updateMany({
+      where: {
+        trainingBlock: { trainingDayId },
+        targetPrExercise: movement,
+        prUpdateEligible: true
+      },
+      data: { prCandidateDeclinedWeight: candidate.candidateWeight }
+    });
+
+    await this.audit.record({
+      event: 'PERSONAL_RECORD_UPDATE_DECLINED',
+      userId,
+      actorUserId: userId,
+      affectedUserId: userId,
+      description: `Atleta ${athlete.user.fullName} recusou atualizar PR de ${candidate.label}.`,
+      ipAddress: context.ipAddress,
+      userAgent: context.userAgent,
+      metadata: {
+        athleteId: athlete.id,
+        trainingDayId,
+        movement,
+        previousWeight: candidate.currentPr,
+        declinedWeight: candidate.candidateWeight,
+        exerciseName: candidate.exerciseName
+      }
+    });
+
     return this.findDayById(trainingDayId);
   }
 
@@ -620,13 +683,20 @@ export class TrainingService {
           id: set.id,
           exerciseKey: set.exerciseKey,
           name: set.exerciseName,
+          exerciseCategory: set.exerciseCategorySnapshot,
+          prescriptionType: set.prescriptionTypeSnapshot,
+          prBase: set.prBaseSnapshot,
           sets: set.sets,
           reps: set.reps,
           load: set.prescribedWeight === null ? null : Number(set.prescribedWeight),
           percentage: set.percentage === null ? null : Number(set.percentage),
+          percentageEnd: set.percentageEnd === null ? null : Number(set.percentageEnd),
           targetPrExercise: set.targetPrExercise,
           prBaseLabel: set.targetPrExercise ? this.movementLabel(set.targetPrExercise as PersonalRecordMovement) : null,
           calculatedWeight: set.calculatedWeightSnapshot === null ? null : Number(set.calculatedWeightSnapshot),
+          calculatedWeightEnd: set.calculatedWeightEndSnapshot === null ? null : Number(set.calculatedWeightEndSnapshot),
+          durationMinutes: set.durationMinutes,
+          notes: set.notes,
           attempts: Array.from({ length: set.sets }, (_, index) => {
             const setIndex = index + 1;
             const attempt = set.attempts.find((item) => item.setIndex === setIndex);
@@ -738,19 +808,102 @@ export class TrainingService {
       ...section,
       exercises: await Promise.all(section.exercises.map(async (exercise) => {
         const mode = exercise.mode ?? (exercise.percentage ? 'PERCENTAGE' : 'MANUAL');
-        const exerciseConfig = getExerciseConfigByKey(exercise.exerciseKey);
-        const targetPrExercise = exerciseConfig?.targetPrExercise ?? null;
+        const exerciseConfig = await this.findExerciseForPrescription(trainer.id, exercise.exerciseKey);
+        const targetPrExercise = this.toTargetPrExercise(exerciseConfig?.prBase ?? null);
         const prUpdateEligible = Boolean(exerciseConfig?.canUpdatePersonalRecord);
         const exerciseName = exerciseConfig?.name ?? exercise.name;
 
+        if (!exerciseName?.trim()) {
+          throw new BadRequestException('Exercise name is required.');
+        }
+
+        if (mode === 'TIME') {
+          if (!exerciseConfig || exerciseConfig.prescriptionType !== 'TIME') {
+            throw new BadRequestException('Time prescription is only allowed for mobility or general warm-up exercises.');
+          }
+          if (!exercise.durationMinutes || exercise.durationMinutes <= 0) {
+            throw new BadRequestException('Duration is required for time prescription.');
+          }
+          return {
+            ...exercise,
+            exerciseKey: exerciseConfig.key,
+            name: exerciseConfig.name,
+            sets: 1,
+            reps: 1,
+            load: undefined,
+            percentage: null,
+            percentageEnd: null,
+            prescribedWeight: null,
+            calculatedWeightSnapshot: null,
+            calculatedWeightEndSnapshot: null,
+            durationMinutes: exercise.durationMinutes,
+            exerciseCategory: exerciseConfig.category,
+            prescriptionType: exerciseConfig.prescriptionType,
+            prBase: exerciseConfig.prBase,
+            targetPrExercise: null,
+            prUpdateEligible: false
+          };
+        }
+
+        if (mode === 'TEXT') {
+          if (!exerciseConfig || exerciseConfig.prescriptionType !== 'TEXT') {
+            throw new BadRequestException('Text prescription is only allowed for Core or General Accessory.');
+          }
+          if (!exercise.notes?.trim()) {
+            throw new BadRequestException('Description is required for Core or General Accessory prescription.');
+          }
+          return {
+            ...exercise,
+            exerciseKey: exerciseConfig.key,
+            name: exerciseConfig.name,
+            sets: 1,
+            reps: 1,
+            load: undefined,
+            percentage: null,
+            percentageEnd: null,
+            prescribedWeight: null,
+            calculatedWeightSnapshot: null,
+            calculatedWeightEndSnapshot: null,
+            durationMinutes: null,
+            notes: exercise.notes.trim(),
+            exerciseCategory: exerciseConfig.category,
+            prescriptionType: exerciseConfig.prescriptionType,
+            prBase: exerciseConfig.prBase,
+            targetPrExercise: null,
+            prUpdateEligible: false
+          };
+        }
+
+        if (exerciseConfig?.prescriptionType === 'TIME') {
+          throw new BadRequestException('Mobility and general warm-up exercises must use time prescription.');
+        }
+        if (exerciseConfig?.prescriptionType === 'TEXT') {
+          throw new BadRequestException('Core and General Accessory exercises must use text prescription.');
+        }
+        if (!exercise.sets || exercise.sets <= 0) {
+          throw new BadRequestException('Sets must be greater than zero.');
+        }
+        if (!exercise.reps || exercise.reps <= 0) {
+          throw new BadRequestException('Reps must be greater than zero.');
+        }
+
         if (mode === 'MANUAL') {
+          if (exercise.load === undefined || exercise.load === null) {
+            throw new BadRequestException('Load is required for manual prescription.');
+          }
           return {
             ...exercise,
             exerciseKey: exerciseConfig?.key ?? exercise.exerciseKey ?? null,
             name: exerciseName,
             percentage: null,
-            prescribedWeight: exercise.load ?? null,
+            percentageEnd: null,
+            prescribedWeight: exercise.load,
             calculatedWeightSnapshot: null,
+            calculatedWeightEndSnapshot: null,
+            durationMinutes: null,
+            exerciseCategory: exerciseConfig?.category ?? null,
+            prescriptionType: exerciseConfig?.prescriptionType ?? null,
+            prBase: exerciseConfig?.prBase ?? null,
             targetPrExercise,
             prUpdateEligible
           };
@@ -770,7 +923,7 @@ export class TrainingService {
           });
           throw new BadRequestException('Exercise must be selected from the configured catalog for percentage prescription.');
         }
-        if (exerciseConfig.prBase === 'NONE' || !targetPrExercise) {
+        if (!exerciseConfig.prBase || !targetPrExercise) {
           await this.audit.record({
             event: 'TRAINING_PERCENTAGE_WITHOUT_PR',
             userId: trainer.id,
@@ -805,10 +958,19 @@ export class TrainingService {
         if (!exercise.percentage) {
           throw new BadRequestException('Percentage is required for percentage prescription.');
         }
+        if (mode === 'PERCENTAGE_RANGE' && !exercise.percentageEnd) {
+          throw new BadRequestException('Final percentage is required for percentage range prescription.');
+        }
+        if (mode === 'PERCENTAGE_RANGE' && Number(exercise.percentageEnd) < Number(exercise.percentage)) {
+          throw new BadRequestException('Final percentage must be greater than or equal to initial percentage.');
+        }
 
         const calculatedWeight = this.roundWeight(
           (Number(record.weight) * Number(exercise.percentage)) / 100
         );
+        const calculatedWeightEnd = mode === 'PERCENTAGE_RANGE'
+          ? this.roundWeight((Number(record.weight) * Number(exercise.percentageEnd)) / 100)
+          : null;
         return {
           ...exercise,
           exerciseKey: exerciseConfig.key,
@@ -816,8 +978,14 @@ export class TrainingService {
           load: undefined,
           prescribedWeight: calculatedWeight,
           calculatedWeightSnapshot: calculatedWeight,
+          calculatedWeightEndSnapshot: calculatedWeightEnd,
+          exerciseCategory: exerciseConfig.category,
+          prescriptionType: exerciseConfig.prescriptionType,
+          prBase: exerciseConfig.prBase,
           targetPrExercise,
           percentage: exercise.percentage,
+          percentageEnd: mode === 'PERCENTAGE_RANGE' ? exercise.percentageEnd : null,
+          durationMinutes: null,
           prUpdateEligible
         };
       }))
@@ -834,6 +1002,8 @@ export class TrainingService {
     const exercises = sections.flatMap((section) => section.exercises);
     const hasManual = exercises.some((exercise) => !exercise.percentage);
     const percentageExercises = exercises.filter((exercise) => exercise.percentage);
+    const coreExercises = exercises.filter((exercise) => exercise.exerciseKey === 'CORE');
+    const accessoryExercises = exercises.filter((exercise) => exercise.exerciseKey === 'GENERAL_ACCESSORY');
     if (hasManual) {
       await this.audit.record({
         event: 'TRAINING_MANUAL_PRESCRIPTION_CREATED',
@@ -875,6 +1045,30 @@ export class TrainingService {
             targetPrExercise: exercise.targetPrExercise
           }))
         }
+      });
+    }
+    if (coreExercises.length) {
+      await this.audit.record({
+        event: 'TRAINING_CORE_PRESCRIPTION_CREATED',
+        userId: trainer.id,
+        actorUserId: trainer.id,
+        affectedUserId: athlete.userId,
+        description: `Treinador ${trainer.fullName} prescreveu Core para ${athlete.user.fullName}.`,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        metadata: { athleteId: athlete.id, trainingDayId: day.id, count: coreExercises.length }
+      });
+    }
+    if (accessoryExercises.length) {
+      await this.audit.record({
+        event: 'TRAINING_ACCESSORY_PRESCRIPTION_CREATED',
+        userId: trainer.id,
+        actorUserId: trainer.id,
+        affectedUserId: athlete.userId,
+        description: `Treinador ${trainer.fullName} prescreveu Acessório Geral para ${athlete.user.fullName}.`,
+        ipAddress: context.ipAddress,
+        userAgent: context.userAgent,
+        metadata: { athleteId: athlete.id, trainingDayId: day.id, count: accessoryExercises.length }
       });
     }
   }
@@ -926,6 +1120,7 @@ export class TrainingService {
         const currentPr = records.get(movement);
         const candidateWeight = Number(set.calculatedWeightSnapshot ?? set.prescribedWeight ?? 0);
         if (!currentPr || candidateWeight <= currentPr) continue;
+        if (set.prCandidateDeclinedWeight && candidateWeight <= Number(set.prCandidateDeclinedWeight)) continue;
         const existing = byMovement.get(movement);
         if (!existing || candidateWeight > existing.candidateWeight) {
           byMovement.set(movement, {
@@ -939,6 +1134,30 @@ export class TrainingService {
       }
     }
     return [...byMovement.values()];
+  }
+
+  private async findExerciseForPrescription(trainerId: string, key: string | null | undefined): Promise<ExerciseConfig | null> {
+    if (!key) return null;
+    const exercise = await this.prisma.exercise.findFirst({
+      where: {
+        key,
+        isActive: true,
+        OR: [{ isSystem: true }, { trainerId }]
+      },
+      select: {
+        key: true,
+        name: true,
+        category: true,
+        prescriptionType: true,
+        prBase: true,
+        canUpdatePersonalRecord: true
+      }
+    });
+    return exercise;
+  }
+
+  private toTargetPrExercise(prBase: PersonalRecordMovement | null): TargetPrExercise | null {
+    return prBase as TargetPrExercise | null;
   }
 
   private movementLabel(movement: PersonalRecordMovement) {

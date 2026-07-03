@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { ArrowLeft, CalendarDays, UserRound } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
@@ -26,47 +26,53 @@ export default function TrainerAthleteProfilePage() {
       .catch((caught) => setError(caught instanceof Error ? caught.message : 'Perfil indisponível.'));
   }, [athleteId]);
 
-  if (error) return <p className="rounded-md bg-red-50 p-4 text-sm text-danger">{error}</p>;
-  if (!profile) return <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />;
+  if (error) return <p className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-danger">{error}</p>;
+  if (!profile) return <div className="space-y-4"><div className="skeleton h-8 w-48" /><div className="skeleton h-44 w-full" /><div className="skeleton h-80 w-full" /></div>;
   const photo = resolveProfilePhoto(profile.profilePhotoUrl);
 
   return (
     <section>
-      <button className="mb-5 flex items-center gap-2 text-sm font-medium text-primary" onClick={() => router.push('/trainer/athletes')} type="button">
+      <button className="mb-5 flex items-center gap-2 text-sm font-semibold text-primary" onClick={() => router.push('/trainer/athletes')} type="button">
         <ArrowLeft size={17} />Voltar para atletas
       </button>
 
-      <article className="rounded-xl border border-border bg-white p-5 sm:p-6">
-        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-muted">Dados pessoais</p>
-        <div className="flex items-center gap-4">
-          {photo ? <img alt={profile.fullName} className="h-20 w-20 rounded-full object-cover sm:h-24 sm:w-24" src={photo} /> : <span className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 text-muted sm:h-24 sm:w-24"><UserRound size={34} /></span>}
-          <div className="min-w-0">
-            <h1 className="truncate text-xl font-semibold sm:text-2xl">{profile.fullName}</h1>
-            <p className="truncate text-sm text-muted">{profile.email}</p>
-            <p className="mt-2 text-sm">{profile.isActive ? 'Conta ativa' : 'Conta inativa'} · {profile.profileStatus === 'PROFILE_COMPLETE' ? 'Perfil completo' : 'Perfil incompleto'}</p>
+      <article className="overflow-hidden rounded-3xl border border-border bg-surface shadow-premium">
+        <div className="h-28 bg-[radial-gradient(circle_at_18%_20%,rgba(212,175,55,0.24),transparent_28rem)]" />
+        <div className="p-5 pt-0 sm:p-6 sm:pt-0">
+          <div className="-mt-12 flex flex-col gap-4 sm:flex-row sm:items-end">
+            {photo ? <img alt={profile.fullName} className="h-28 w-28 rounded-3xl border border-primary/35 object-cover shadow-glow" src={photo} /> : <span className="flex h-28 w-28 items-center justify-center rounded-3xl border border-primary/35 bg-primary/10 text-primary shadow-glow"><UserRound size={38} /></span>}
+            <div className="min-w-0 pb-1">
+              <p className="eyebrow">Dados pessoais</p>
+              <h1 className="mt-2 truncate text-2xl font-semibold sm:text-3xl">{profile.fullName}</h1>
+              <p className="truncate text-sm text-muted">{profile.email}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <StatusBadge label={profile.isActive ? 'Conta ativa' : 'Conta inativa'} tone={profile.isActive ? 'success' : 'danger'} />
+                <StatusBadge label={profile.profileStatus === 'PROFILE_COMPLETE' ? 'Perfil completo' : 'Perfil incompleto'} tone={profile.profileStatus === 'PROFILE_COMPLETE' ? 'success' : 'warning'} />
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Info label="Idade" value={profile.age ? `${profile.age} anos` : undefined} />
-          <Info label="Nascimento" value={profile.birthDate ? new Date(profile.birthDate).toLocaleDateString('pt-BR') : undefined} />
-          <Info label="Academia" value={profile.gym ?? undefined} />
+          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <Info label="Idade" value={profile.age ? `${profile.age} anos` : undefined} />
+            <Info label="Nascimento" value={profile.birthDate ? new Date(profile.birthDate).toLocaleDateString('pt-BR') : undefined} />
+            <Info label="Academia" value={profile.gym ?? undefined} />
+          </div>
         </div>
       </article>
 
-      <article className="mt-4 rounded-xl border border-border bg-white p-5">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted">Dados esportivos</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <article className="card mt-5 p-5">
+        <p className="eyebrow">Dados esportivos</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Info label="Categoria" value={profile.weightCategory ? `${profile.weightCategory} kg` : undefined} />
-          <Info label="Nível de treinamento" value={profile.competitiveLevel ? levelLabels[profile.competitiveLevel] : undefined} />
-          {profile.personalRecords.map((record) => <Info key={record.id} label={movementLabels[record.exercise]} value={`${record.weight} kg · ${new Date(record.recordDate).toLocaleDateString('pt-BR')}`} />)}
+          <Info label="Nível competitivo" value={profile.competitiveLevel ? levelLabels[profile.competitiveLevel] : undefined} />
+          {profile.personalRecords.map((record) => <Info key={record.id} label={movementLabels[record.exercise]} value={`${record.weight} kg · ${new Date(record.recordDate).toLocaleDateString('pt-BR')}`} highlight />)}
           {!profile.personalRecords.length && <p className="text-sm text-muted">Nenhum PR cadastrado.</p>}
         </div>
       </article>
 
-      <article className="mt-4 rounded-xl border border-border bg-white p-5">
-        <div className="mb-4 flex items-center gap-2">
-          <CalendarDays className="text-primary" size={20} />
-          <div><h2 className="font-semibold">Calendário de treinos</h2><p className="text-xs text-muted">Clique em uma data para prescrever ou visualizar.</p></div>
+      <article className="card mt-5 p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><CalendarDays size={20} /></span>
+          <div><h2 className="text-xl font-semibold">Calendário de treinos</h2><p className="text-sm text-muted">Clique em uma data para prescrever ou visualizar.</p></div>
         </div>
         <TrainingCalendar
           load={loadCalendar}
@@ -77,6 +83,11 @@ export default function TrainerAthleteProfilePage() {
   );
 }
 
-function Info({ label, value }: { label: string; value?: string }) {
-  return <div className="rounded-lg bg-slate-50 p-3"><p className="text-xs font-medium uppercase text-muted">{label}</p><p className="mt-1 text-sm font-medium">{value ?? '-'}</p></div>;
+function Info({ label, value, highlight = false }: { label: string; value?: string; highlight?: boolean }) {
+  return <div className="rounded-2xl border border-border bg-sidebar p-4"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">{label}</p><p className={`mt-2 text-sm font-semibold ${highlight ? 'text-primary' : 'text-foreground'}`}>{value ?? '-'}</p></div>;
+}
+
+function StatusBadge({ label, tone }: { label: string; tone: 'success' | 'warning' | 'danger' }) {
+  const classes = tone === 'success' ? 'bg-emerald-50 text-emerald-700' : tone === 'warning' ? 'bg-amber-50 text-amber-800' : 'bg-red-50 text-red-700';
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${classes}`}>{label}</span>;
 }

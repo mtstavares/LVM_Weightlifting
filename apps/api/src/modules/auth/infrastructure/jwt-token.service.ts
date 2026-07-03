@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { SignOptions } from 'jsonwebtoken';
 import { AuthTokens, TokenPayload } from '../domain/auth.types';
 import { TokenService } from '../domain/token-service';
 
@@ -15,9 +16,9 @@ export class JwtTokenService implements TokenService {
   async issue(payload: Omit<TokenPayload, 'type'>): Promise<AuthTokens> {
     const accessSecret = this.config.getOrThrow<string>('JWT_ACCESS_SECRET');
     const refreshSecret = this.config.getOrThrow<string>('JWT_REFRESH_SECRET');
-    const accessExpiresIn = this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m');
-    const refreshExpiresIn = this.config.get<string>('JWT_REFRESH_EXPIRES_IN', '7d');
-    const refreshExpiresAt = new Date(Date.now() + this.durationToMilliseconds(refreshExpiresIn));
+    const accessExpiresIn = this.config.get<SignOptions['expiresIn']>('JWT_ACCESS_EXPIRES_IN', '15m');
+    const refreshExpiresIn = this.config.get<SignOptions['expiresIn']>('JWT_REFRESH_EXPIRES_IN', '7d');
+    const refreshExpiresAt = new Date(Date.now() + this.durationToMilliseconds(String(refreshExpiresIn)));
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(

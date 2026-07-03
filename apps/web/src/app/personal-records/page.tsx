@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -24,7 +24,7 @@ export default function PersonalRecordsPage() {
     void (async () => {
       try {
         const user = await getCurrentUser();
-        if (user.role !== 'ATHLETE') return router.replace('/dashboard');
+        if (user.role !== 'ATHLETE') return router.replace('/athlete/training');
         if (!user.profileComplete) return router.replace('/complete-profile');
         setRecords(await listPersonalRecords());
       } catch {
@@ -35,12 +35,12 @@ export default function PersonalRecordsPage() {
 
   return (
     <main className="min-h-screen bg-background px-5 py-8">
-      <section className="mx-auto max-w-4xl">
-        <button className="mb-5 flex items-center gap-2 text-sm text-primary" onClick={() => router.push('/dashboard')} type="button">
-          <ArrowLeft size={16} />Voltar
+      <section className="mx-auto max-w-5xl">
+        <button className="mb-5 flex items-center gap-2 text-sm font-semibold text-primary" onClick={() => router.push('/athlete/profile')} type="button">
+          <ArrowLeft size={16} />Voltar ao perfil
         </button>
-        <h1 className="text-2xl font-semibold">Recordes pessoais</h1>
-        <p className="mt-2 text-sm text-muted">Cadastre ou atualize sua melhor marca em cada movimento.</p>
+        <h1 className="page-title">Recordes pessoais</h1>
+        <p className="page-subtitle">Cadastre ou atualize sua melhor marca em cada movimento.</p>
 
         {feedback && (
           <div className="mt-4">
@@ -55,11 +55,11 @@ export default function PersonalRecordsPage() {
           </div>
         )}
 
-        <section className="mt-6 rounded-md border border-border bg-white p-5">
+        <section className="card mt-6 p-5">
           <h2 className="font-semibold">PRs atuais</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {records.map((record) => (
-              <span className="rounded-md bg-slate-100 px-3 py-2 text-sm" key={record.id}>
+              <span className="rounded-xl border border-primary/25 bg-primary/10 px-3 py-2 text-sm text-primary" key={record.id}>
                 {movementLabels[record.exercise]}: <strong>{record.weight} kg</strong>
               </span>
             ))}
@@ -107,7 +107,7 @@ function RecordForm({
 
   return (
     <form
-      className="rounded-md border border-border bg-white p-5"
+      className="card p-5"
       onSubmit={async (event) => {
         event.preventDefault();
         clearFeedback();
@@ -129,28 +129,28 @@ function RecordForm({
         }
       }}
     >
-          <h2 className="font-semibold">{movementLabels[movement]}</h2>
+      <h2 className="font-semibold">{movementLabels[movement]}</h2>
       {record?.history?.length ? (
-        <div className="mt-3 rounded-md bg-slate-50 p-3 text-xs text-muted">
-          <p className="font-medium text-foreground">Últimas atualizações</p>
+        <div className="mt-3 rounded-xl border border-border bg-sidebar p-3 text-xs text-muted">
+          <p className="font-semibold text-foreground">Últimas atualizações</p>
           {record.history.slice(0, 3).map((item) => (
             <p className="mt-1" key={item.id}>{item.weight} kg em {new Date(item.recordDate).toLocaleDateString('pt-BR')}</p>
           ))}
         </div>
       ) : null}
-      <label className="mt-4 block text-sm">
+      <label className="mt-4 block text-sm font-semibold">
         Carga (kg)
         <input className="input mt-2" min="0.5" max="1000" step="0.01" required type="number" value={weight} onChange={(event) => setWeight(event.target.value)} />
       </label>
-      <label className="mt-4 block text-sm">
+      <label className="mt-4 block text-sm font-semibold">
         Data da marca
         <input className="input mt-2" max={new Date().toISOString().slice(0, 10)} required type="date" value={recordDate} onChange={(event) => setRecordDate(event.target.value)} />
       </label>
-      <label className="mt-4 block text-sm">
+      <label className="mt-4 block text-sm font-semibold">
         Observação
-        <textarea className="mt-2 min-h-20 w-full rounded-md border border-border p-3 text-sm" maxLength={1000} value={notes} onChange={(event) => setNotes(event.target.value)} />
+        <textarea className="mt-2 min-h-20 w-full rounded-xl border border-border bg-sidebar p-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" maxLength={1000} value={notes} onChange={(event) => setNotes(event.target.value)} />
       </label>
-      <button className="mt-4 h-10 w-full rounded-md bg-primary text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60" disabled={loading} type="submit">
+      <button className="btn-primary mt-4 w-full" disabled={loading} type="submit">
         {loading ? 'Salvando...' : 'Salvar PR'}
       </button>
     </form>

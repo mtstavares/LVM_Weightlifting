@@ -2,7 +2,7 @@ export type UploadFileInput = {
   buffer: Buffer;
   fileName: string;
   contentType: string;
-  folder: 'videos' | 'photos' | 'exercises';
+  folder: 'videos' | 'photos' | 'exercises' | 'feed';
 };
 
 export type UploadedFile = {

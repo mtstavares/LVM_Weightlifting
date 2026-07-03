@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useMemo, useState } from 'react';
 import {
@@ -62,29 +62,29 @@ export function AthleteProfileForm({
       }}
     >
       <Field label="Nome completo">
-        <input className="input" required minLength={3} value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        <input className="input" required minLength={3} value={fullName} onChange={(event) => setFullName(event.target.value)} />
       </Field>
       <Field label="Foto de perfil">
         <input
           accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-          className="block h-11 w-full rounded-md border border-border p-2 text-sm"
+          className="block h-11 w-full rounded-xl border border-border bg-sidebar p-2 text-sm text-muted"
           required={requirePhoto}
           type="file"
-          onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
+          onChange={(event) => setPhoto(event.target.files?.[0] ?? null)}
         />
       </Field>
       <Field label="Data de nascimento">
-        <input className="input" max={new Date().toISOString().slice(0, 10)} required type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+        <input className="input" max={new Date().toISOString().slice(0, 10)} required type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} />
         <p className="mt-1 text-xs text-muted">Idade calculada: {age ?? '-'}</p>
       </Field>
       <Field label="Sexo">
-        <select className="input" value={sex} onChange={(e) => changeSex(e.target.value as AthleteSex)}>
+        <select className="input" value={sex} onChange={(event) => changeSex(event.target.value as AthleteSex)}>
           <option value="FEMALE">Feminino</option>
           <option value="MALE">Masculino</option>
         </select>
       </Field>
       <Field label="Categoria de peso">
-        <select className="input" required value={weightCategory} onChange={(e) => setWeightCategory(e.target.value)}>
+        <select className="input" required value={weightCategory} onChange={(event) => setWeightCategory(event.target.value)}>
           <option value="">Selecione</option>
           {weightCategories[sex].map((category) => (
             <option key={category.value} value={category.value}>
@@ -94,7 +94,7 @@ export function AthleteProfileForm({
         </select>
       </Field>
       <Field label="Nível competitivo">
-        <select className="input" value={competitiveLevel} onChange={(e) => setCompetitiveLevel(e.target.value as CompetitiveLevel)}>
+        <select className="input" value={competitiveLevel} onChange={(event) => setCompetitiveLevel(event.target.value as CompetitiveLevel)}>
           {levels.map((level) => <option key={level} value={level}>{levelLabels[level]}</option>)}
         </select>
       </Field>
@@ -102,7 +102,7 @@ export function AthleteProfileForm({
         <input className="input" maxLength={120} value={gym} onChange={(event) => setGym(event.target.value)} />
       </Field>
       {error && <p className="text-sm text-danger sm:col-span-2">{error}</p>}
-      <button className="h-11 rounded-md bg-primary px-5 text-sm font-semibold text-white disabled:opacity-60 sm:col-span-2" disabled={loading} type="submit">
+      <button className="btn-primary sm:col-span-2" disabled={loading} type="submit">
         {loading ? 'Salvando...' : submitLabel}
       </button>
     </form>
@@ -110,7 +110,7 @@ export function AthleteProfileForm({
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block text-sm font-medium"><span className="mb-2 block">{label}</span>{children}</label>;
+  return <label className="block text-sm font-semibold"><span className="mb-2 block">{label}</span>{children}</label>;
 }
 
 function calculateAge(value: string) {

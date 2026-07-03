@@ -9,6 +9,7 @@ import {
   UseInterceptors
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { ApiTags } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
 import { TrainerProfileService } from '../application/trainer-profile.service';
@@ -40,6 +41,7 @@ export class TrainersController {
   }
 
   @Patch('me/profile')
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
   @UseInterceptors(
     FileInterceptor('photo', {
       storage: memoryStorage(),

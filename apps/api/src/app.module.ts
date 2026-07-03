@@ -11,6 +11,9 @@ import { MailModule } from './shared/infrastructure/mail/mail.module';
 import { StorageModule } from './shared/infrastructure/storage/storage.module';
 import { TrainersModule } from './modules/trainers/trainers.module';
 import { TrainingModule } from './modules/training/training.module';
+import { ExercisesModule } from './modules/exercises/exercises.module';
+import { FeedModule } from './modules/feed/feed.module';
+import { CsrfOriginGuard } from './modules/auth/presentation/csrf-origin.guard';
 
 @Module({
   imports: [
@@ -30,6 +33,8 @@ import { TrainingModule } from './modules/training/training.module';
     AuthModule,
     AthletesModule,
     TrainersModule,
+    ExercisesModule,
+    FeedModule,
     TrainingModule,
     AuditModule,
     HealthModule
@@ -38,6 +43,10 @@ import { TrainingModule } from './modules/training/training.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard
+    },
+    {
+      provide: APP_GUARD,
+      useClass: CsrfOriginGuard
     }
   ]
 })

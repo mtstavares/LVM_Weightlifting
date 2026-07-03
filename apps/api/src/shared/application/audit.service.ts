@@ -32,15 +32,21 @@ export class AuditService {
   }
 
   private sanitizeMetadata(metadata?: Prisma.InputJsonValue): Prisma.InputJsonValue | undefined {
-    if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') {
-      return metadata;
-    }
-
     const blockedKeys = ['password', 'token', 'code', 'secret', 'authorization'];
-    return Object.fromEntries(
-      Object.entries(metadata).filter(
-        ([key]) => !blockedKeys.some((blocked) => key.toLowerCase().includes(blocked))
-      )
-    );
+    const sanitize = (value: Prisma.InputJsonValue): Prisma.InputJsonValue | undefined => {
+      if (Array.isArray(value)) {
+        return value
+          .map((item) => sanitize(item))
+          .filter((item): item is Prisma.InputJsonValue => item !== undefined);
+      }
+      if (!value || typeof value !== 'object') return value;
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([key]) => !blockedKeys.some((blocked) => key.toLowerCase().includes(blocked)))
+          .map(([key, item]) => [key, sanitize(item as Prisma.InputJsonValue)])
+          .filter(([, item]) => item !== undefined)
+      );
+    };
+    return metadata === undefined ? undefined : sanitize(metadata);
   }
 }

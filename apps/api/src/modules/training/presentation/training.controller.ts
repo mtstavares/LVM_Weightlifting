@@ -188,6 +188,22 @@ export class TrainingController {
     );
   }
 
+  @Post('athlete/days/:trainingDayId/personal-records/:movement/decline')
+  @Roles('ATHLETE')
+  declinePersonalRecord(
+    @Req() request: AuthenticatedRequest,
+    @Param('trainingDayId') trainingDayId: string,
+    @Param('movement', new ParseEnumPipe(PersonalRecordMovement))
+    movement: PersonalRecordMovement
+  ) {
+    return this.training.declinePersonalRecord(
+      request.user.id,
+      trainingDayId,
+      movement,
+      this.context(request)
+    );
+  }
+
   @Put('athlete/days/:trainingDayId/feedback')
   @Roles('ATHLETE')
   saveFeedback(

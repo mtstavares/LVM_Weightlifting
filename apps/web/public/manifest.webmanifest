@@ -1,0 +1,17 @@
+{
+  "name": "LVM Weightlifting",
+  "short_name": "LVM",
+  "description": "Gestão premium de atletas de levantamento de peso olímpico.",
+  "start_url": "/login",
+  "display": "standalone",
+  "background_color": "#0B0B0B",
+  "theme_color": "#0B0B0B",
+  "icons": [
+    {
+      "src": "/brand/logo-lvm.png",
+      "sizes": "1536x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

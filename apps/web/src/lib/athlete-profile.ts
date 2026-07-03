@@ -85,6 +85,11 @@ export const levelLabels: Record<CompetitiveLevel, string> = {
   INTERNATIONAL: 'Internacional'
 };
 
+export const sexLabels: Record<AthleteSex, string> = {
+  FEMALE: 'Feminino',
+  MALE: 'Masculino'
+};
+
 function profileForm(input: ProfileInput, photo?: File | null) {
   const form = new FormData();
   Object.entries(input).forEach(([key, value]) => form.set(key, value));

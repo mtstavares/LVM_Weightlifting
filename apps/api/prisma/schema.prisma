@@ -43,7 +43,11 @@ enum AuthAuditEvent {
   TRAINING_PERCENTAGE_PRESCRIPTION_CREATED
   TRAINING_PERCENTAGE_CALCULATED
   TRAINING_PERCENTAGE_WITHOUT_PR
+  TRAINING_CORE_PRESCRIPTION_CREATED
+  TRAINING_ACCESSORY_PRESCRIPTION_CREATED
   PERSONAL_RECORD_CANDIDATE_IDENTIFIED
+  PERSONAL_RECORD_UPDATE_CONFIRMED
+  PERSONAL_RECORD_UPDATE_DECLINED
   TRAINING_ARCHIVED
   FEEDBACK_CREATED
   FEEDBACK_UPDATED
@@ -56,6 +60,27 @@ enum AuthAuditEvent {
   TRAINER_PROFILE_UPDATED
   TRAINER_PHOTO_UPDATED
   ACCESS_DENIED
+  EXERCISE_CREATED
+  EXERCISE_UPDATED
+  EXERCISE_DUPLICATED
+  EXERCISE_DEACTIVATED
+  EXERCISE_GLOBAL_EDIT_DENIED
+  EXERCISE_ACCESS_DENIED
+  FEED_POST_CREATED
+  FEED_POST_DELETED_BY_AUTHOR
+  FEED_POST_DELETED_BY_TRAINER
+  FEED_POST_DELETE_DENIED
+  FEED_ACCESS_DENIED
+  FEED_UPLOAD_INVALID_TYPE
+  FEED_UPLOAD_VIDEO_TOO_LONG
+  FEED_COMMENT_CREATED
+  FEED_COMMENT_DELETED_BY_AUTHOR
+  FEED_COMMENT_DELETED_BY_TRAINER
+  FEED_COMMENT_DELETE_DENIED
+  FEED_COMMENT_CREATE_DENIED
+  FEED_LIKE_CREATED
+  FEED_LIKE_REMOVED
+  FEED_LIKE_DENIED
 }
 
 enum AuditResult {
@@ -97,11 +122,26 @@ enum TrainingWeekStatus {
 
 enum ExerciseCategory {
   SNATCH
+  CLEAN_AND_JERK
   CLEAN
   JERK
   SQUAT
   PULL
+  DEADLIFT
+  MOBILITY
+  GENERAL_WARMUP
   ACCESSORY
+}
+
+enum ExercisePrescriptionType {
+  LOAD
+  TIME
+  TEXT
+}
+
+enum FeedPostMediaType {
+  IMAGE
+  VIDEO
 }
 
 enum TrainingBlockType {
@@ -158,6 +198,11 @@ model User {
   athleteProfile Athlete?       @relation("AthleteUser")
   coachComments  CoachComment[]
   trainingMessages TrainingMessage[]
+  customExercises Exercise[] @relation("TrainerCustomExercises")
+  authoredFeedPosts FeedPost[] @relation("FeedPostAuthor")
+  trainerFeedPosts FeedPost[] @relation("FeedPostTrainer")
+  authoredFeedComments FeedComment[] @relation("FeedCommentAuthor")
+  feedLikes FeedLike[] @relation("FeedLikeUser")
   refreshTokens  RefreshToken[]
   accountCodes   AccountCode[]
   auditLogs      AuthAuditLog[] @relation("LegacyAuditUser")
@@ -321,8 +366,15 @@ model TrainingDay {
 
 model Exercise {
   id             String           @id @default(uuid())
-  name           String           @unique
+  key            String           @unique
+  trainerId      String?          @map("trainer_id")
+  name           String
   category       ExerciseCategory
+  prescriptionType ExercisePrescriptionType @default(LOAD) @map("prescription_type")
+  prBase         PersonalRecordMovement? @map("pr_base")
+  canUpdatePersonalRecord Boolean @default(false) @map("can_update_personal_record")
+  isSystem       Boolean          @default(false) @map("is_system")
+  isActive       Boolean          @default(true) @map("is_active")
   description    String?
   videoReference String?          @map("video_reference")
   objective      String?
@@ -330,9 +382,71 @@ model Exercise {
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
 
+  trainer          User?             @relation("TrainerCustomExercises", fields: [trainerId], references: [id], onDelete: Cascade)
   complexMovements ComplexMovement[]
 
+  @@index([trainerId, isActive])
+  @@index([isSystem, isActive])
   @@map("exercises")
+}
+
+model FeedPost {
+  id                   String             @id @default(uuid())
+  trainerId            String             @map("trainer_id")
+  authorUserId         String             @map("author_user_id")
+  caption              String?
+  mediaType            FeedPostMediaType? @map("media_type")
+  mediaPath            String?            @map("media_path")
+  mediaUrl             String?            @map("media_url")
+  mediaMimeType        String?            @map("media_mime_type")
+  mediaSizeBytes       Int?               @map("media_size_bytes")
+  videoDurationSeconds Int?               @map("video_duration_seconds")
+  deletedAt            DateTime?          @map("deleted_at")
+  deletedById          String?            @map("deleted_by_id")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  trainer User @relation("FeedPostTrainer", fields: [trainerId], references: [id], onDelete: Cascade)
+  author  User @relation("FeedPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  comments FeedComment[]
+  likes    FeedLike[]
+
+  @@index([trainerId, deletedAt, createdAt])
+  @@index([authorUserId, createdAt])
+  @@map("feed_posts")
+}
+
+model FeedComment {
+  id           String    @id @default(uuid())
+  postId       String    @map("post_id")
+  authorUserId String    @map("author_user_id")
+  text         String
+  deletedAt    DateTime? @map("deleted_at")
+  deletedById  String?   @map("deleted_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  post   FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User     @relation("FeedCommentAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([postId, deletedAt, createdAt])
+  @@index([authorUserId, createdAt])
+  @@map("feed_comments")
+}
+
+model FeedLike {
+  id        String   @id @default(uuid())
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  post FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User     @relation("FeedLikeUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId, createdAt])
+  @@index([userId, createdAt])
+  @@map("feed_likes")
 }
 
 model TrainingBlock {
@@ -360,13 +474,20 @@ model TrainingSet {
   trainingBlockId          String            @map("training_block_id")
   exerciseKey              String?           @map("exercise_key")
   exerciseName             String            @map("exercise_name")
+  exerciseCategorySnapshot ExerciseCategory? @map("exercise_category_snapshot")
+  prescriptionTypeSnapshot ExercisePrescriptionType? @map("prescription_type_snapshot")
+  prBaseSnapshot           PersonalRecordMovement? @map("pr_base_snapshot")
   sets                     Int
   reps                     Int
   percentage               Decimal?          @db.Decimal(5, 2)
+  percentageEnd            Decimal?          @map("percentage_end") @db.Decimal(5, 2)
   prescribedWeight         Decimal?          @map("prescribed_weight") @db.Decimal(6, 2)
   targetPrExercise         TargetPrExercise? @map("target_pr_exercise")
   calculatedWeightSnapshot Decimal?          @map("calculated_weight_snapshot") @db.Decimal(6, 2)
+  calculatedWeightEndSnapshot Decimal?       @map("calculated_weight_end_snapshot") @db.Decimal(6, 2)
+  durationMinutes          Int?              @map("duration_minutes")
   prUpdateEligible         Boolean           @default(false) @map("pr_update_eligible")
+  prCandidateDeclinedWeight Decimal?         @map("pr_candidate_declined_weight") @db.Decimal(6, 2)
   restSeconds              Int?              @map("rest_seconds")
   notes                    String?
   displayOrder             Int               @map("display_order")

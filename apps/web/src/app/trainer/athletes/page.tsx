@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { Ban, Mail, Plus, RotateCcw, Search, UserRound } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -46,14 +46,14 @@ export default function TrainerAthletesPage() {
 
   return (
     <section>
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-primary">Gestão</p>
-          <h1 className="mt-1 text-2xl font-semibold">Atletas</h1>
-          <p className="mt-2 text-sm text-muted">Gerencie exclusivamente os atletas vinculados à sua conta.</p>
+          <p className="eyebrow">Gestão</p>
+          <h1 className="page-title">Atletas</h1>
+          <p className="page-subtitle">Gerencie exclusivamente os atletas vinculados à sua conta.</p>
         </div>
-        <button className="flex h-11 shrink-0 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white" onClick={() => setShowCreate(true)} type="button">
-          <Plus size={18} /><span className="hidden sm:inline">Adicionar atleta</span>
+        <button className="btn-primary shrink-0" onClick={() => setShowCreate(true)} type="button">
+          <Plus size={18} /><span>Adicionar atleta</span>
         </button>
       </div>
 
@@ -68,23 +68,23 @@ export default function TrainerAthletesPage() {
         </select>
       </div>
 
-      {error && <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-danger">{error}</p>}
+      {error && <p className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-danger">{error}</p>}
 
       <div className="mt-5 grid gap-3 md:grid-cols-2">
         {athletes.map((athlete) => {
           const photo = resolveProfilePhoto(athlete.profilePhotoUrl);
           return (
             <article
-              className="cursor-pointer rounded-xl border border-border bg-white p-4 transition hover:border-emerald-300 hover:shadow-sm"
+              className="group cursor-pointer rounded-2xl border border-border bg-surface p-4 shadow-premium transition hover:-translate-y-0.5 hover:border-primary/35 hover:bg-surface-hover"
               key={athlete.id}
               onClick={() => router.push(`/trainer/athletes/${athlete.id}`)}
             >
               <div className="flex items-start gap-3">
-                {photo ? <img alt={athlete.fullName} className="h-12 w-12 rounded-full object-cover" src={photo} /> : <span className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-muted"><UserRound size={23} /></span>}
+                {photo ? <img alt={athlete.fullName} className="h-14 w-14 rounded-2xl object-cover ring-1 ring-primary/25" src={photo} /> : <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-sidebar text-muted"><UserRound size={24} /></span>}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{athlete.fullName}</p>
+                  <p className="truncate font-semibold text-foreground">{athlete.fullName}</p>
                   <p className="truncate text-sm text-muted">{athlete.email}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                     <StatusBadge status={athlete.status} />
                     <span className="text-muted">Último acesso: {formatDate(athlete.lastAccessAt)}</span>
                   </div>
@@ -104,7 +104,7 @@ export default function TrainerAthletesPage() {
           );
         })}
       </div>
-      {!athletes.length && !error && <p className="mt-5 rounded-xl border border-dashed border-border bg-white p-10 text-center text-sm text-muted">Nenhum atleta encontrado.</p>}
+      {!athletes.length && !error && <p className="mt-5 rounded-2xl border border-dashed border-border bg-surface p-10 text-center text-sm text-muted">Nenhum atleta encontrado.</p>}
 
       {showCreate && <CreateDialog close={() => setShowCreate(false)} created={async () => { setShowCreate(false); await load(); }} />}
       {deactivateTarget && <DeactivateDialog athlete={deactivateTarget} close={() => setDeactivateTarget(null)} confirmed={async (reason) => { await deactivateAthlete(deactivateTarget.id, reason); setDeactivateTarget(null); await load(); }} />}
@@ -132,8 +132,8 @@ function CreateDialog({ close, created }: { close: () => void; created: () => Pr
           setLoading(false);
         }
       }}>
-        <label className="text-sm font-medium">Nome completo<input className="input mt-2" required value={fullName} onChange={(event) => setFullName(event.target.value)} /></label>
-        <label className="mt-4 block text-sm font-medium">E-mail<input className="input mt-2" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+        <label className="text-sm font-semibold">Nome completo<input className="input mt-2" required value={fullName} onChange={(event) => setFullName(event.target.value)} /></label>
+        <label className="mt-4 block text-sm font-semibold">E-mail<input className="input mt-2" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         {error && <p className="mt-3 text-sm text-danger">{error}</p>}
         <DialogActions close={close} loading={loading} label="Criar e enviar acesso" />
       </form>
@@ -146,22 +146,22 @@ function DeactivateDialog({ athlete, close, confirmed }: { athlete: AthleteSumma
   const [loading, setLoading] = useState(false);
   return (
     <Modal title="Desativar atleta" close={close}>
-      <p className="text-sm leading-6">Deseja desativar este atleta? O acesso será bloqueado, mas todo o histórico será preservado.</p>
-      <p className="mt-2 font-medium">{athlete.fullName}</p>
-      <label className="mt-5 block text-sm font-medium">Motivo opcional<textarea className="mt-2 min-h-24 w-full rounded-md border border-border p-3 text-sm" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+      <p className="text-sm leading-6 text-muted">Deseja desativar este atleta? O acesso será bloqueado, mas todo o histórico será preservado.</p>
+      <p className="mt-2 font-semibold">{athlete.fullName}</p>
+      <label className="mt-5 block text-sm font-semibold">Motivo opcional<textarea className="mt-2 min-h-24 w-full rounded-xl border border-border bg-sidebar p-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" value={reason} onChange={(event) => setReason(event.target.value)} /></label>
       <DialogActions close={close} loading={loading} label="Desativar" action={async () => { setLoading(true); await confirmed(reason); }} />
     </Modal>
   );
 }
 
 function Modal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
-  return <div className="fixed inset-0 z-50 flex items-end bg-black/40 sm:items-center sm:justify-center sm:p-5"><section className="max-h-[90vh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 sm:max-w-md sm:rounded-xl"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">{title}</h2><button className="text-2xl" onClick={close} type="button">×</button></div><div className="mt-5">{children}</div></section></div>;
+  return <div className="fixed inset-0 z-50 flex items-end bg-black/70 backdrop-blur-sm sm:items-center sm:justify-center sm:p-5"><section className="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl border border-border bg-surface p-5 shadow-premium sm:max-w-md sm:rounded-3xl"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">{title}</h2><button className="text-2xl text-muted hover:text-foreground" onClick={close} type="button">×</button></div><div className="mt-5">{children}</div></section></div>;
 }
 function DialogActions({ close, loading, label, action }: { close: () => void; loading: boolean; label: string; action?: () => Promise<void> }) {
-  return <div className="mt-6 grid grid-cols-2 gap-3"><button className="h-11 rounded-md border border-border text-sm" onClick={close} type="button">Cancelar</button><button className="h-11 rounded-md bg-primary text-sm font-semibold text-white disabled:opacity-60" disabled={loading} onClick={action ? () => void action() : undefined} type={action ? 'button' : 'submit'}>{loading ? 'Salvando...' : label}</button></div>;
+  return <div className="mt-6 grid grid-cols-2 gap-3"><button className="btn-ghost" onClick={close} type="button">Cancelar</button><button className="btn-primary" disabled={loading} onClick={action ? () => void action() : undefined} type={action ? 'button' : 'submit'}>{loading ? 'Salvando...' : label}</button></div>;
 }
 function Action({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
-  return <button aria-label={title} className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-xs font-medium" onClick={onClick} title={title} type="button">{children}<span className="hidden sm:inline">{title}</span></button>;
+  return <button aria-label={title} className="btn-ghost h-9 px-3 text-xs" onClick={onClick} title={title} type="button">{children}<span className="hidden sm:inline">{title}</span></button>;
 }
 function StatusBadge({ status }: { status: AthleteStatus }) {
   return <span className={`rounded-full px-2 py-1 font-semibold ${status === 'ATIVO' ? 'bg-emerald-50 text-emerald-700' : status === 'INATIVO' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-800'}`}>{statusLabels[status]}</span>;

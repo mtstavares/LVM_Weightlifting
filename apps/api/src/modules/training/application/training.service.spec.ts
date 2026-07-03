@@ -37,10 +37,15 @@ function fixture(overrides: Record<string, unknown> = {}) {
             sets: 2,
             reps: 10,
             percentage: null,
+            percentageEnd: null,
             prescribedWeight: null,
             targetPrExercise: null,
             calculatedWeightSnapshot: null,
+            calculatedWeightEndSnapshot: null,
+            durationMinutes: null,
+            notes: null,
             prUpdateEligible: false,
+            prCandidateDeclinedWeight: null,
             restSeconds: 30,
             attempts: [],
             displayOrder: 0
@@ -73,6 +78,7 @@ describe('TrainingService', () => {
   beforeEach(() => {
     prisma = {
       athlete: { findUnique: jest.fn() },
+      exercise: { findFirst: jest.fn() },
       trainingDay: {
         findMany: jest.fn(),
         findFirst: jest.fn(),
@@ -83,7 +89,7 @@ describe('TrainingService', () => {
       trainingWeek: { findFirst: jest.fn(), create: jest.fn() },
       trainingRevision: { create: jest.fn() },
       complexMovement: { deleteMany: jest.fn() },
-      trainingSet: { deleteMany: jest.fn() },
+      trainingSet: { deleteMany: jest.fn(), updateMany: jest.fn() },
       trainingSetAttempt: { upsert: jest.fn() },
       trainingBlock: { deleteMany: jest.fn(), update: jest.fn() },
       workoutCompletion: { upsert: jest.fn() },
@@ -99,6 +105,27 @@ describe('TrainingService', () => {
     audit = { record: jest.fn().mockResolvedValue(undefined) };
     service = new TrainingService(prisma, audit as any);
     prisma.athlete.findUnique.mockResolvedValue(athlete);
+    prisma.exercise.findFirst.mockImplementation(({ where }: any) => {
+      const key = where.key;
+      const configs: Record<string, any> = {
+        SNATCH: { key: 'SNATCH', name: 'Snatch', category: 'SNATCH', prescriptionType: 'LOAD', prBase: 'SNATCH', canUpdatePersonalRecord: true },
+        HANG_SNATCH: { key: 'HANG_SNATCH', name: 'Hang Snatch', category: 'SNATCH', prescriptionType: 'LOAD', prBase: 'SNATCH', canUpdatePersonalRecord: false },
+        POWER_SNATCH: { key: 'POWER_SNATCH', name: 'Power Snatch', category: 'SNATCH', prescriptionType: 'LOAD', prBase: 'SNATCH', canUpdatePersonalRecord: false },
+        SNATCH_BALANCE: { key: 'SNATCH_BALANCE', name: 'Snatch Balance', category: 'SNATCH', prescriptionType: 'LOAD', prBase: 'SNATCH', canUpdatePersonalRecord: false },
+        CLEAN_PULL: { key: 'CLEAN_PULL', name: 'Clean Pull', category: 'CLEAN_AND_JERK', prescriptionType: 'LOAD', prBase: 'CLEAN_JERK', canUpdatePersonalRecord: false },
+        SPLIT_JERK: { key: 'SPLIT_JERK', name: 'Split Jerk', category: 'CLEAN_AND_JERK', prescriptionType: 'LOAD', prBase: 'CLEAN_JERK', canUpdatePersonalRecord: false },
+        BACK_SQUAT: { key: 'BACK_SQUAT', name: 'Back Squat', category: 'SQUAT', prescriptionType: 'LOAD', prBase: 'BACK_SQUAT', canUpdatePersonalRecord: true },
+        PAUSE_BACK_SQUAT: { key: 'PAUSE_BACK_SQUAT', name: 'Pause Back Squat', category: 'SQUAT', prescriptionType: 'LOAD', prBase: 'BACK_SQUAT', canUpdatePersonalRecord: false },
+        FRONT_SQUAT: { key: 'FRONT_SQUAT', name: 'Front Squat', category: 'SQUAT', prescriptionType: 'LOAD', prBase: 'FRONT_SQUAT', canUpdatePersonalRecord: true },
+        PAUSE_FRONT_SQUAT: { key: 'PAUSE_FRONT_SQUAT', name: 'Pause Front Squat', category: 'SQUAT', prescriptionType: 'LOAD', prBase: 'FRONT_SQUAT', canUpdatePersonalRecord: false },
+        DEADLIFT: { key: 'DEADLIFT', name: 'Deadlift', category: 'DEADLIFT', prescriptionType: 'LOAD', prBase: 'DEADLIFT', canUpdatePersonalRecord: true },
+        RDL: { key: 'RDL', name: 'RDL', category: 'DEADLIFT', prescriptionType: 'LOAD', prBase: 'DEADLIFT', canUpdatePersonalRecord: false },
+        MOBILITY: { key: 'MOBILITY', name: 'Mobilidade', category: 'MOBILITY', prescriptionType: 'TIME', prBase: null, canUpdatePersonalRecord: false },
+        GENERAL_WARMUP: { key: 'GENERAL_WARMUP', name: 'Aquecimento Geral', category: 'GENERAL_WARMUP', prescriptionType: 'TIME', prBase: null, canUpdatePersonalRecord: false },
+        CORE: { key: 'CORE', name: 'Core', category: 'ACCESSORY', prescriptionType: 'TEXT', prBase: null, canUpdatePersonalRecord: false }
+      };
+      return Promise.resolve(configs[key] ?? null);
+    });
   });
 
   it('lists calendar entries with calculated status and progress', async () => {
@@ -224,6 +251,164 @@ describe('TrainingService', () => {
     );
     expect(result!.sections[0].exercises[0]).toMatchObject({ percentage: 85, calculatedWeight: 170 });
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'TRAINING_PERCENTAGE_CALCULATED' }));
+  });
+
+  it('calculates percentage range prescriptions and stores both snapshots', async () => {
+    prisma.athlete.findUnique.mockResolvedValue({
+      ...athlete,
+      personalRecords: [{ exercise: 'FRONT_SQUAT', weight: 100 }]
+    });
+    prisma.trainingDay.findFirst.mockResolvedValue(null);
+    prisma.trainingWeek.findFirst.mockResolvedValue({ id: 'week-1' });
+    prisma.trainingDay.create.mockResolvedValue(fixture({ blocks: [] }));
+    prisma.trainingDay.update.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseName: 'Front Squat',
+          sets: 4,
+          reps: 3,
+          percentage: 60,
+          percentageEnd: 75,
+          prescribedWeight: 60,
+          calculatedWeightSnapshot: 60,
+          calculatedWeightEndSnapshot: 75,
+          exerciseKey: 'FRONT_SQUAT',
+          targetPrExercise: 'FRONT_SQUAT'
+        }]
+      }]
+    }));
+
+    const result = await service.saveDay(
+      { id: 'trainer-1', fullName: 'Treinador' },
+      'athlete-1',
+      dateKey,
+      { sections: [{ type: 'STRENGTH', exercises: [{ exerciseKey: 'FRONT_SQUAT', name: 'Front Squat', sets: 4, reps: 3, mode: 'PERCENTAGE_RANGE', percentage: 60, percentageEnd: 75 }] }] },
+      {}
+    );
+
+    expect(prisma.trainingDay.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          blocks: expect.objectContaining({
+            create: [expect.objectContaining({
+              sets: expect.objectContaining({
+                create: [expect.objectContaining({
+                  percentage: 60,
+                  percentageEnd: 75,
+                  prescribedWeight: 60,
+                  calculatedWeightSnapshot: 60,
+                  calculatedWeightEndSnapshot: 75
+                })]
+              })
+            })]
+          })
+        })
+      })
+    );
+    expect(result!.sections[0].exercises[0]).toMatchObject({ percentage: 60, percentageEnd: 75, calculatedWeight: 60, calculatedWeightEnd: 75 });
+  });
+
+  it('stores mobility and general warm-up as time prescriptions', async () => {
+    prisma.trainingDay.findFirst.mockResolvedValue(null);
+    prisma.trainingWeek.findFirst.mockResolvedValue({ id: 'week-1' });
+    prisma.trainingDay.create.mockResolvedValue(fixture({ blocks: [] }));
+    prisma.trainingDay.update.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'GENERAL_WARMUP',
+          exerciseName: 'Aquecimento Geral',
+          sets: 1,
+          reps: 1,
+          durationMinutes: 15
+        }]
+      }]
+    }));
+
+    const result = await service.saveDay(
+      { id: 'trainer-1', fullName: 'Treinador' },
+      'athlete-1',
+      dateKey,
+      { sections: [{ type: 'WARMUP', exercises: [{ exerciseKey: 'GENERAL_WARMUP', name: 'Aquecimento Geral', sets: 1, reps: 1, mode: 'TIME', durationMinutes: 15 }] }] },
+      {}
+    );
+
+    expect(prisma.trainingDay.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          blocks: expect.objectContaining({
+            create: [expect.objectContaining({
+              sets: expect.objectContaining({
+                create: [expect.objectContaining({
+                  exerciseKey: 'GENERAL_WARMUP',
+                  exerciseName: 'Aquecimento Geral',
+                  sets: 1,
+                  reps: 1,
+                  durationMinutes: 15,
+                  prescribedWeight: null,
+                  percentage: null
+                })]
+              })
+            })]
+          })
+        })
+      })
+    );
+    expect(result!.sections[0].exercises[0]).toMatchObject({ durationMinutes: 15, load: null, percentage: null });
+  });
+
+  it('stores Core and General Accessory as text prescriptions', async () => {
+    prisma.trainingDay.findFirst.mockResolvedValue(null);
+    prisma.trainingWeek.findFirst.mockResolvedValue({ id: 'week-1' });
+    prisma.trainingDay.create.mockResolvedValue(fixture({ blocks: [] }));
+    prisma.trainingDay.update.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'CORE',
+          exerciseName: 'Core',
+          sets: 1,
+          reps: 1,
+          notes: '3 rounds: prancha 45s.'
+        }]
+      }]
+    }));
+
+    const result = await service.saveDay(
+      { id: 'trainer-1', fullName: 'Treinador' },
+      'athlete-1',
+      dateKey,
+      { sections: [{ type: 'BODYBUILDING', exercises: [{ exerciseKey: 'CORE', name: 'Core', sets: 1, reps: 1, mode: 'TEXT', notes: '3 rounds: prancha 45s.' }] }] },
+      {}
+    );
+
+    expect(prisma.trainingDay.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          blocks: expect.objectContaining({
+            create: [expect.objectContaining({
+              sets: expect.objectContaining({
+                create: [expect.objectContaining({
+                  exerciseKey: 'CORE',
+                  exerciseName: 'Core',
+                  sets: 1,
+                  reps: 1,
+                  notes: '3 rounds: prancha 45s.',
+                  prescribedWeight: null,
+                  percentage: null
+                })]
+              })
+            })]
+          })
+        })
+      })
+    );
+    expect(result!.sections[0].exercises[0]).toMatchObject({ notes: '3 rounds: prancha 45s.', load: null, percentage: null });
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'TRAINING_CORE_PRESCRIPTION_CREATED' }));
   });
 
   it.each([
@@ -590,7 +775,63 @@ describe('TrainingService', () => {
       expect.objectContaining({ data: expect.objectContaining({ exercise: 'SNATCH', weight: 105 }) })
     );
     expect(result!.possiblePersonalRecords).toEqual([]);
-    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'PERSONAL_RECORD_UPSERTED' }));
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'PERSONAL_RECORD_UPDATE_CONFIRMED' }));
+  });
+
+  it('declines a personal record candidate and hides the same suggestion', async () => {
+    const completedDay = fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        completedAt: new Date(),
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'SNATCH',
+          exerciseName: 'Snatch',
+          sets: 1,
+          prescribedWeight: 105,
+          targetPrExercise: 'SNATCH',
+          prUpdateEligible: true,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: {
+        athlete: {
+          personalRecords: [{ exercise: 'SNATCH', weight: 100 }],
+          user: { id: 'athlete-user', fullName: 'Atleta Teste' }
+        }
+      },
+      workoutCompletions: [{ startedAt: new Date(), completed: true, finishedAt: new Date() }]
+    });
+    prisma.trainingDay.findFirst.mockResolvedValue(completedDay);
+    prisma.trainingDay.findUnique.mockResolvedValue(fixture({
+      blocks: [{
+        ...fixture().blocks[0],
+        completedAt: new Date(),
+        sets: [{
+          ...fixture().blocks[0].sets[0],
+          exerciseKey: 'SNATCH',
+          exerciseName: 'Snatch',
+          sets: 1,
+          prescribedWeight: 105,
+          targetPrExercise: 'SNATCH',
+          prUpdateEligible: true,
+          prCandidateDeclinedWeight: 105,
+          attempts: [{ setIndex: 1, successful: true, completedAt: new Date() }]
+        }]
+      }],
+      trainingWeek: completedDay.trainingWeek,
+      workoutCompletions: completedDay.workoutCompletions
+    }));
+
+    const result = await service.declinePersonalRecord('athlete-user', 'day-1', 'SNATCH', {});
+
+    expect(prisma.trainingSet.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { prCandidateDeclinedWeight: 105 }
+      })
+    );
+    expect(result!.possiblePersonalRecords).toEqual([]);
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ event: 'PERSONAL_RECORD_UPDATE_DECLINED' }));
   });
 
   it.each([

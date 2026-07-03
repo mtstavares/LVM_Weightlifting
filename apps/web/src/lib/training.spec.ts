@@ -4,6 +4,7 @@ import {
   athleteCalendar,
   completeTraining,
   confirmTrainingPersonalRecord,
+  declineTrainingPersonalRecord,
   deleteTrainerTrainingDay,
   getAthleteTrainingDay,
   getTrainerTrainingDay,
@@ -57,17 +58,19 @@ describe('training api client', () => {
     await updateTrainingSetAttempt('day-1', 'set-1', 2, false);
     await completeTraining('day-1');
     await confirmTrainingPersonalRecord('day-1', 'SNATCH');
+    await declineTrainingPersonalRecord('day-1', 'SNATCH');
     await saveTrainingFeedback('day-1', { pse: 8, fatigue: 6, observations: 'Boa sessão' });
     await sendAthleteTrainingMessage('day-1', 'Resposta do atleta.');
 
-    expect(fetchMock).toHaveBeenCalledTimes(9);
+    expect(fetchMock).toHaveBeenCalledTimes(10);
     expect(fetchMock.mock.calls[2]![0]).toContain('/start');
     expect(fetchMock.mock.calls[3]![1]!.method).toBe('PATCH');
     expect(fetchMock.mock.calls[4]![0]).toContain('/sets/set-1/attempts/2');
     expect(fetchMock.mock.calls[5]![0]).toContain('/complete');
     expect(fetchMock.mock.calls[6]![0]).toContain('/personal-records/SNATCH/confirm');
-    expect(fetchMock.mock.calls[7]![0]).toContain('/feedback');
-    expect(fetchMock.mock.calls[8]![0]).toContain('/messages');
+    expect(fetchMock.mock.calls[7]![0]).toContain('/personal-records/SNATCH/decline');
+    expect(fetchMock.mock.calls[8]![0]).toContain('/feedback');
+    expect(fetchMock.mock.calls[9]![0]).toContain('/messages');
   });
 
   it('accepts empty successful responses without JSON errors', async () => {

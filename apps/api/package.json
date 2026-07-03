@@ -9,18 +9,19 @@
     "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest --coverage",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:generate": "node scripts/prisma.mjs generate",
+    "prisma:migrate": "node scripts/prisma.mjs migrate deploy",
+    "prisma:migrate:dev": "node scripts/prisma.mjs migrate dev",
+    "prisma:seed": "node scripts/prisma.mjs db seed"
   },
   "dependencies": {
-    "@nestjs/common": "^10.4.1",
-    "@nestjs/config": "^3.2.3",
-    "@nestjs/core": "^10.4.1",
-    "@nestjs/jwt": "^10.2.0",
-    "@nestjs/platform-express": "^10.4.1",
-    "@nestjs/swagger": "^7.4.0",
-    "@nestjs/throttler": "^6.4.0",
+    "@nestjs/common": "^11.1.27",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.1.27",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/platform-express": "^11.1.27",
+    "@nestjs/swagger": "^11.4.5",
+    "@nestjs/throttler": "^6.5.0",
     "@prisma/client": "^5.19.1",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
@@ -51,6 +52,6 @@
     "typescript": "^5.5.4"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "node ../../node_modules/tsx/dist/cli.mjs prisma/seed.ts"
   }
 }

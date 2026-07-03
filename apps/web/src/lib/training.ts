@@ -11,13 +11,20 @@ export type TrainingExercise = {
   id?: string;
   exerciseKey: string | null;
   name: string;
+  exerciseCategory: string | null;
+  prescriptionType: string | null;
+  prBase: string | null;
   sets: number;
   reps: number;
   load: number | null;
   percentage: number | null;
+  percentageEnd: number | null;
   targetPrExercise: string | null;
   prBaseLabel: string | null;
   calculatedWeight: number | null;
+  calculatedWeightEnd: number | null;
+  durationMinutes: number | null;
+  notes: string | null;
   attempts: {
     setIndex: number;
     successful: boolean | null;
@@ -103,9 +110,12 @@ export type SaveTrainingDay = {
       name: string;
       sets: number;
       reps: number;
-      mode?: 'MANUAL' | 'PERCENTAGE';
+      mode?: 'MANUAL' | 'PERCENTAGE' | 'PERCENTAGE_RANGE' | 'TIME' | 'TEXT';
       load?: number;
       percentage?: number;
+      percentageEnd?: number;
+      durationMinutes?: number;
+      notes?: string;
     }[];
   }[];
 };
@@ -183,6 +193,13 @@ export function completeTraining(trainingDayId: string) {
 export function confirmTrainingPersonalRecord(trainingDayId: string, movement: string) {
   return apiRequest<TrainingDay>(
     `/training/athlete/days/${trainingDayId}/personal-records/${movement}/confirm`,
+    { method: 'POST' }
+  );
+}
+
+export function declineTrainingPersonalRecord(trainingDayId: string, movement: string) {
+  return apiRequest<TrainingDay>(
+    `/training/athlete/days/${trainingDayId}/personal-records/${movement}/decline`,
     { method: 'POST' }
   );
 }

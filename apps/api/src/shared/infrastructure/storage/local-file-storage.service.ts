@@ -1,5 +1,5 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -26,7 +26,7 @@ export class LocalFileStorageService implements FileStorageService {
 
   async delete(path: string): Promise<void> {
     const root = this.config.get<string>('LOCAL_STORAGE_ROOT', '../../storage');
-    await rm(join(root, 'photos', basename(path)), { force: true });
+    await rm(join(root, path), { force: true });
   }
 
   getUrl(path: string): string {
@@ -37,7 +37,10 @@ export class LocalFileStorageService implements FileStorageService {
     const extensions: Record<string, string> = {
       'image/jpeg': 'jpg',
       'image/png': 'png',
-      'image/webp': 'webp'
+      'image/webp': 'webp',
+      'video/mp4': 'mp4',
+      'video/quicktime': 'mov',
+      'video/webm': 'webm'
     };
     const extension = extensions[contentType];
     if (!extension) throw new Error('Unsupported file type.');
