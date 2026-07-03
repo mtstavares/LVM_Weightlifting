@@ -472,6 +472,66 @@ Verifique:
 - `WEB_URL` no Render e igual a URL da Vercel?
 - A URL nao tem barra final?
 
+### Erro `Nao foi possivel concluir a solicitacao` ao criar conta
+
+Normalmente isso indica que o frontend esta chamando o endpoint errado ou recebendo erro HTML/404.
+
+Verifique na Vercel:
+
+- `NEXT_PUBLIC_API_URL` existe?
+- O valor e exatamente a URL da API no Render?
+- Exemplo:
+
+```bash
+NEXT_PUBLIC_API_URL=https://lvm-api.onrender.com
+```
+
+- Nao use a URL da Vercel no `NEXT_PUBLIC_API_URL`.
+- Depois de alterar variaveis `NEXT_PUBLIC_*`, faca novo deploy do frontend. Essas variaveis entram no build.
+
+Verifique no Render:
+
+- `WEB_URL` existe?
+- O valor e exatamente a URL do frontend na Vercel?
+- Exemplo:
+
+```bash
+WEB_URL=https://lvm-weightlifting.vercel.app
+```
+
+- Nao coloque barra final.
+- Depois de alterar `WEB_URL`, faca redeploy da API.
+
+### Erro Vercel `TypeError: Invalid URL`
+
+Esse erro normalmente vem de uma variavel de ambiente com URL invalida.
+
+Confira na Vercel:
+
+- `NEXT_PUBLIC_APP_URL` deve ser uma URL completa.
+- `NEXT_PUBLIC_API_URL` deve ser uma URL completa.
+- `API_PROXY_URL` deve ser uma URL completa.
+- Nao use colchetes, aspas, texto extra ou espaco.
+- Nao coloque barra final.
+
+Correto:
+
+```bash
+NEXT_PUBLIC_APP_URL=https://lvm-weightlifting.vercel.app
+NEXT_PUBLIC_API_URL=https://lvm-api.onrender.com
+API_PROXY_URL=https://lvm-api.onrender.com
+```
+
+Errado:
+
+```bash
+NEXT_PUBLIC_APP_URL=[https://lvm-weightlifting.vercel.app]
+NEXT_PUBLIC_API_URL=SUA-API-DO-RENDER.onrender.com
+API_PROXY_URL=https://lvm-api.onrender.com/
+```
+
+Depois de corrigir variaveis na Vercel, faca `Redeploy without cache`.
+
 ### Cadastro nao envia e-mail
 
 Verifique:

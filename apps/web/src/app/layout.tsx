@@ -3,9 +3,10 @@ import { MotionPage } from '../components/motion-page';
 import './globals.css';
 
 const logoPath = '/brand/logo-lvm.png';
+const appUrl = safeUrl(process.env.NEXT_PUBLIC_APP_URL, 'http://localhost:3000');
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
+  metadataBase: appUrl,
   title: 'LVM Weightlifting',
   description: 'Gestão de atletas de levantamento de peso olímpico',
   manifest: '/manifest.webmanifest',
@@ -38,4 +39,12 @@ export default function RootLayout({
       <body><MotionPage>{children}</MotionPage></body>
     </html>
   );
+}
+
+function safeUrl(value: string | undefined, fallback: string) {
+  try {
+    return new URL(value || fallback);
+  } catch {
+    return new URL(fallback);
+  }
 }
