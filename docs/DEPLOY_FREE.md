@@ -155,7 +155,7 @@ Use:
 - Build Command:
 
 ```bash
-npm install --include=dev && npm run build:api
+npm ci --include=dev && npm run build:api
 ```
 
 - Start Command:
@@ -170,7 +170,7 @@ npm run start:api:prod
 /health
 ```
 
-Observacao: o `--include=dev` e necessario porque o build da API usa ferramentas de desenvolvimento, como Nest CLI, TypeScript, Prisma CLI e TSX. Sem isso, o Render pode falhar com `nest: not found`.
+Observacao: o `--include=dev` e necessario porque o build da API usa ferramentas de desenvolvimento, como Nest CLI, TypeScript, Prisma CLI e TSX. O `npm ci` forca uma instalacao limpa baseada no `package-lock.json` e evita cache antigo do Render.
 
 ### 4.3 Variaveis da API no Render
 

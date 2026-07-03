@@ -1,11 +1,13 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { ExpressAdapter } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser = require('cookie-parser');
+import express = require('express');
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(express()));
   assertProductionSecrets();
   app.enableCors({
     origin: process.env.WEB_URL ?? 'http://localhost:3000',
