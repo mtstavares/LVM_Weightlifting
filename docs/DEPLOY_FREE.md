@@ -155,7 +155,7 @@ Use:
 - Build Command:
 
 ```bash
-npm install && npm run build:api
+npm install --include=dev && npm run build:api
 ```
 
 - Start Command:
@@ -169,6 +169,8 @@ npm run start:api:prod
 ```bash
 /health
 ```
+
+Observacao: o `--include=dev` e necessario porque o build da API usa ferramentas de desenvolvimento, como Nest CLI, TypeScript, Prisma CLI e TSX. Sem isso, o Render pode falhar com `nest: not found`.
 
 ### 4.3 Variaveis da API no Render
 
