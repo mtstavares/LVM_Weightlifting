@@ -255,8 +255,8 @@ Se demorar, aguarde. Render Free pode hibernar.
 O arquivo `apps/web/vercel.json` ja define:
 
 - framework: Next.js;
-- install: `cd ../.. && npm install`;
-- build: `cd ../.. && npm run build:web`;
+- install: `npm install`;
+- build: `npm run build`;
 - output gerenciado automaticamente pela Vercel.
 
 Se a Vercel pedir configuracao manual, use:
@@ -272,13 +272,13 @@ apps/web
 - Install Command:
 
 ```bash
-cd ../.. && npm install
+npm install
 ```
 
 - Build Command:
 
 ```bash
-cd ../.. && npm run build:web
+npm run build
 ```
 
 - Output Directory: deixe em branco. Para Next.js, a Vercel gerencia a saida automaticamente.
