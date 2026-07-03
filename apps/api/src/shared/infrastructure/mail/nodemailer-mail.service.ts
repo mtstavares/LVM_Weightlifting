@@ -13,11 +13,14 @@ export class NodemailerMailService implements MailService {
   constructor(private readonly config: ConfigService) {
     const host = this.config.get<string>('SMTP_HOST');
     this.transporter = host
-      ? nodemailer.createTransport({
-          host,
-          port: Number(this.config.get<string>('SMTP_PORT', '587')),
-          secure: this.config.get<string>('SMTP_SECURE', 'false') === 'true',
-          auth: this.config.get<string>('SMTP_USER')
+        ? nodemailer.createTransport({
+            host,
+            port: Number(this.config.get<string>('SMTP_PORT', '587')),
+            secure: this.config.get<string>('SMTP_SECURE', 'false') === 'true',
+            connectionTimeout: Number(this.config.get<string>('SMTP_CONNECTION_TIMEOUT_MS', '10000')),
+            greetingTimeout: Number(this.config.get<string>('SMTP_GREETING_TIMEOUT_MS', '10000')),
+            socketTimeout: Number(this.config.get<string>('SMTP_SOCKET_TIMEOUT_MS', '15000')),
+            auth: this.config.get<string>('SMTP_USER')
             ? {
                 user: this.config.getOrThrow<string>('SMTP_USER'),
                 pass: this.config.getOrThrow<string>('SMTP_PASSWORD')

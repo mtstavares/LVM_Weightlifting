@@ -128,6 +128,9 @@ SMTP_SECURE=false
 SMTP_USER=resend
 SMTP_PASSWORD=SUA_API_KEY_RESEND
 SMTP_FROM=LVM Weightlifting <onboarding@resend.dev>
+SMTP_CONNECTION_TIMEOUT_MS=10000
+SMTP_GREETING_TIMEOUT_MS=10000
+SMTP_SOCKET_TIMEOUT_MS=15000
 ```
 
 Para teste, `onboarding@resend.dev` pode funcionar. Para producao com dominio proprio, depois configure um dominio verificado no Resend.
@@ -191,6 +194,9 @@ SMTP_SECURE=false
 SMTP_USER=resend
 SMTP_PASSWORD=SUA_API_KEY_RESEND
 SMTP_FROM=LVM Weightlifting <onboarding@resend.dev>
+SMTP_CONNECTION_TIMEOUT_MS=10000
+SMTP_GREETING_TIMEOUT_MS=10000
+SMTP_SOCKET_TIMEOUT_MS=15000
 ```
 
 `WEB_URL` sera atualizado depois que a Vercel gerar a URL real do frontend.
@@ -531,6 +537,35 @@ API_PROXY_URL=https://lvm-api.onrender.com/
 ```
 
 Depois de corrigir variaveis na Vercel, faca `Redeploy without cache`.
+
+### Botao `Criar conta` fica carregando sem parar
+
+Isso geralmente significa que a API recebeu a requisicao, mas ficou presa tentando enviar e-mail via SMTP.
+
+Verifique no Render:
+
+- `SMTP_HOST=smtp.resend.com`
+- `SMTP_PORT=587`
+- `SMTP_SECURE=false`
+- `SMTP_USER=resend`
+- `SMTP_PASSWORD` deve ser a API key real do Resend.
+- `SMTP_FROM` deve ser um remetente aceito pelo Resend.
+
+Para teste, use:
+
+```bash
+SMTP_FROM=LVM Weightlifting <onboarding@resend.dev>
+```
+
+Tambem configure os timeouts:
+
+```bash
+SMTP_CONNECTION_TIMEOUT_MS=10000
+SMTP_GREETING_TIMEOUT_MS=10000
+SMTP_SOCKET_TIMEOUT_MS=15000
+```
+
+Depois de alterar qualquer variavel SMTP no Render, faca redeploy da API.
 
 ### Cadastro nao envia e-mail
 
