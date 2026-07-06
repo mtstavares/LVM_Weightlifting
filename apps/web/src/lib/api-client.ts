@@ -58,9 +58,6 @@ function safeJson(text: string): unknown {
 }
 
 export function apiRequest<T>(path: string, options?: ApiRequestOptions) {
-  if (!configuredApiUrl && process.env.NODE_ENV === 'production') {
-    throw new Error('API de produção não configurada. Defina NEXT_PUBLIC_API_URL na Vercel e faça novo deploy.');
-  }
   return request<T>(`${API_URL}${path}`, options);
 }
 

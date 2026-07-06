@@ -298,7 +298,7 @@ Importante: nao configure `.next` manualmente como Output Directory. Isso pode c
 Configure em `Environment Variables`:
 
 ```bash
-NEXT_PUBLIC_API_URL=https://lvm-api.onrender.com
+NEXT_PUBLIC_API_URL=/api
 NEXT_PUBLIC_APP_URL=https://seu-projeto.vercel.app
 API_PROXY_URL=https://lvm-api.onrender.com
 ```
@@ -339,7 +339,7 @@ Na Vercel, atualize:
 
 ```bash
 NEXT_PUBLIC_APP_URL=https://lvm-weightlifting.vercel.app
-NEXT_PUBLIC_API_URL=https://lvm-api.onrender.com
+NEXT_PUBLIC_API_URL=/api
 API_PROXY_URL=https://lvm-api.onrender.com
 ```
 
@@ -485,14 +485,15 @@ Normalmente isso indica que o frontend esta chamando o endpoint errado ou recebe
 Verifique na Vercel:
 
 - `NEXT_PUBLIC_API_URL` existe?
-- O valor e exatamente a URL da API no Render?
+- O valor deve ser `/api` para usar o proxy same-origin da Vercel.
 - Exemplo:
 
 ```bash
-NEXT_PUBLIC_API_URL=https://lvm-api.onrender.com
+NEXT_PUBLIC_API_URL=/api
 ```
 
-- Nao use a URL da Vercel no `NEXT_PUBLIC_API_URL`.
+- Nao use a URL direta do Render em `NEXT_PUBLIC_API_URL`, senao os cookies de sessao podem virar cookies cross-site e o usuario volta para o login apos autenticar.
+- A URL direta do Render deve ficar em `API_PROXY_URL`.
 - Depois de alterar variaveis `NEXT_PUBLIC_*`, faca novo deploy do frontend. Essas variaveis entram no build.
 
 Verifique no Render:
@@ -515,8 +516,8 @@ Esse erro normalmente vem de uma variavel de ambiente com URL invalida.
 Confira na Vercel:
 
 - `NEXT_PUBLIC_APP_URL` deve ser uma URL completa.
-- `NEXT_PUBLIC_API_URL` deve ser uma URL completa.
-- `API_PROXY_URL` deve ser uma URL completa.
+- `NEXT_PUBLIC_API_URL` deve ser `/api`.
+- `API_PROXY_URL` deve ser uma URL completa do Render.
 - Nao use colchetes, aspas, texto extra ou espaco.
 - Nao coloque barra final.
 
@@ -524,7 +525,7 @@ Correto:
 
 ```bash
 NEXT_PUBLIC_APP_URL=https://lvm-weightlifting.vercel.app
-NEXT_PUBLIC_API_URL=https://lvm-api.onrender.com
+NEXT_PUBLIC_API_URL=/api
 API_PROXY_URL=https://lvm-api.onrender.com
 ```
 
@@ -532,7 +533,7 @@ Errado:
 
 ```bash
 NEXT_PUBLIC_APP_URL=[https://lvm-weightlifting.vercel.app]
-NEXT_PUBLIC_API_URL=SUA-API-DO-RENDER.onrender.com
+NEXT_PUBLIC_API_URL=https://lvm-api.onrender.com
 API_PROXY_URL=https://lvm-api.onrender.com/
 ```
 
