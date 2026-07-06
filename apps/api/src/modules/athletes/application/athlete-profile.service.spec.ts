@@ -81,7 +81,8 @@ describe('AthleteProfileService', () => {
         url: '/storage/photos/profile.png'
       }),
       delete: jest.fn(),
-      getUrl: jest.fn((path) => `/storage/${path}`)
+      getUrl: jest.fn((path) => `/storage/${path}`),
+      read: jest.fn()
     };
     audit = { record: jest.fn() } as unknown as jest.Mocked<AuditService>;
     service = new AthleteProfileService(prisma as PrismaService, storage, audit);

@@ -1,13 +1,13 @@
-import { Controller, ForbiddenException, Get, NotFoundException, Param, Req, Res, UseGuards } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Req, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
-import { resolve } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
+import { FileStorageService } from '../../domain/file-storage.service';
 import { AuthenticatedRequest } from '../../../modules/auth/presentation/authenticated-request';
 import { JwtAuthGuard } from '../../../modules/auth/presentation/jwt-auth.guard';
 import { PasswordChangeCompletedGuard } from '../../../modules/auth/presentation/password-change-completed.guard';
 import { Roles } from '../../../modules/auth/presentation/roles.decorator';
 import { RolesGuard } from '../../../modules/auth/presentation/roles.guard';
+import { FILE_STORAGE_SERVICE } from './storage.token';
 
 @Controller('storage')
 @UseGuards(JwtAuthGuard, PasswordChangeCompletedGuard, RolesGuard)
@@ -15,7 +15,7 @@ import { RolesGuard } from '../../../modules/auth/presentation/roles.guard';
 export class PrivateMediaController {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService
+    @Inject(FILE_STORAGE_SERVICE) private readonly storage: FileStorageService
   ) {}
 
   @Get('feed/:fileName')
@@ -33,7 +33,7 @@ export class PrivateMediaController {
     });
     if (!post) throw new NotFoundException('Media not found.');
     if (post.trainerId !== trainerId) throw new ForbiddenException('Media does not belong to authenticated group.');
-    return response.sendFile(this.absolutePath(path));
+    return this.sendStoredFile(response, path);
   }
 
   @Get('photos/:fileName')
@@ -57,14 +57,14 @@ export class PrivateMediaController {
       },
       select: { id: true }
     });
-    if (trainer) return response.sendFile(this.absolutePath(path));
+    if (trainer) return this.sendStoredFile(response, path);
 
     const athlete = await this.prisma.athlete.findFirst({
       where: { profilePhoto: path, coachId: trainerId },
       select: { id: true }
     });
     if (!athlete) throw new NotFoundException('Media not found.');
-    return response.sendFile(this.absolutePath(path));
+    return this.sendStoredFile(response, path);
   }
 
   private async resolveTrainerId(request: AuthenticatedRequest) {
@@ -77,13 +77,28 @@ export class PrivateMediaController {
     return athlete.coachId;
   }
 
-  private absolutePath(path: string) {
-    return resolve(this.config.get<string>('LOCAL_STORAGE_ROOT', '../../storage'), path);
-  }
-
   private assertSafeFileName(fileName: string) {
     if (!/^[a-f0-9-]+\.(jpg|jpeg|png|webp|mp4|mov|webm)$/i.test(fileName)) {
       throw new NotFoundException('Media not found.');
     }
+  }
+
+  private async sendStoredFile(response: Response, path: string) {
+    response.type(this.contentTypeFor(path));
+    return response.send(await this.storage.read(path));
+  }
+
+  private contentTypeFor(path: string) {
+    const extension = path.split('.').pop()?.toLowerCase();
+    const contentTypes: Record<string, string> = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+      mp4: 'video/mp4',
+      mov: 'video/quicktime',
+      webm: 'video/webm'
+    };
+    return contentTypes[extension ?? ''] ?? 'application/octet-stream';
   }
 }

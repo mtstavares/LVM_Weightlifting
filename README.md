@@ -20,11 +20,17 @@ Sprints 3 a 6 concluidas: gestao de atletas, calendario de treinos, prescricao, 
 
 Para publicar uma versão de teste sem custo mensal, use o guia em `docs/DEPLOY_FREE.md`.
 
+## Infraestrutura local Docker
+
+Para rodar a arquitetura local com Traefik, PostgreSQL, MinIO, Mailpit e Redis, use `docs/DOCKER_LOCAL.md`.
+
 Servicos locais:
 
-- Web: `http://localhost:3000`
-- API: `http://localhost:3333`
-- Swagger: `http://localhost:3333/docs`
+- Web Docker: `http://app.localhost`
+- API Docker: `http://api.localhost`
+- Health API Docker: `http://api.localhost/health`
+- Mailpit Docker: `http://mail.localhost`
+- MinIO Docker: `http://minio.localhost`
 
 ## E-mails no ambiente local
 

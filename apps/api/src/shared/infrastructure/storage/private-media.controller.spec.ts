@@ -4,8 +4,11 @@ import { PrivateMediaController } from './private-media.controller';
 describe('PrivateMediaController', () => {
   let prisma: any;
   let controller: PrivateMediaController;
-  const response = { sendFile: jest.fn((path: string) => path) };
-  const config = { get: jest.fn((_key: string, fallback: string) => fallback) };
+  const response = {
+    type: jest.fn(),
+    send: jest.fn((body: Buffer) => body)
+  };
+  const storage = { read: jest.fn() };
   const trainerRequest = { user: { id: 'trainer-1', role: 'TRAINER' } };
   const athleteRequest = { user: { id: 'athlete-user-1', role: 'ATHLETE' } };
 
@@ -15,8 +18,10 @@ describe('PrivateMediaController', () => {
       athlete: { findUnique: jest.fn(), findFirst: jest.fn() },
       user: { findFirst: jest.fn() }
     };
-    response.sendFile.mockClear();
-    controller = new PrivateMediaController(prisma, config as any);
+    response.type.mockClear();
+    response.send.mockClear();
+    storage.read.mockResolvedValue(Buffer.from('media'));
+    controller = new PrivateMediaController(prisma, storage as any);
   });
 
   it('serves feed media only for the authenticated trainer group', async () => {
@@ -24,7 +29,8 @@ describe('PrivateMediaController', () => {
 
     await controller.feedMedia(trainerRequest as any, '11111111-1111-4111-8111-111111111111.jpg', response as any);
 
-    expect(response.sendFile).toHaveBeenCalled();
+    expect(response.type).toHaveBeenCalledWith('image/jpeg');
+    expect(response.send).toHaveBeenCalled();
   });
 
   it('blocks feed media from another trainer group', async () => {
@@ -43,7 +49,8 @@ describe('PrivateMediaController', () => {
 
     await controller.feedMedia(athleteRequest as any, '11111111-1111-4111-8111-111111111111.mp4', response as any);
 
-    expect(response.sendFile).toHaveBeenCalled();
+    expect(response.type).toHaveBeenCalledWith('video/mp4');
+    expect(response.send).toHaveBeenCalled();
   });
 
   it('allows trainer to access linked athlete profile photo', async () => {
@@ -52,6 +59,7 @@ describe('PrivateMediaController', () => {
 
     await controller.profilePhoto(trainerRequest as any, '11111111-1111-4111-8111-111111111111.webp', response as any);
 
-    expect(response.sendFile).toHaveBeenCalled();
+    expect(response.type).toHaveBeenCalledWith('image/webp');
+    expect(response.send).toHaveBeenCalled();
   });
 });

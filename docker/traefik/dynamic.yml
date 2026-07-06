@@ -1,0 +1,52 @@
+http:
+  routers:
+    lvm-web:
+      rule: Host(`app.localhost`)
+      entryPoints:
+        - web
+      service: lvm-web
+
+    lvm-web-localhost:
+      rule: Host(`localhost`)
+      entryPoints:
+        - web
+      service: lvm-web
+
+    lvm-api:
+      rule: Host(`api.localhost`)
+      entryPoints:
+        - web
+      service: lvm-api
+
+    lvm-mailpit:
+      rule: Host(`mail.localhost`)
+      entryPoints:
+        - web
+      service: lvm-mailpit
+
+    lvm-minio:
+      rule: Host(`minio.localhost`)
+      entryPoints:
+        - web
+      service: lvm-minio
+
+  services:
+    lvm-web:
+      loadBalancer:
+        servers:
+          - url: http://web:3000
+
+    lvm-api:
+      loadBalancer:
+        servers:
+          - url: http://api:3333
+
+    lvm-mailpit:
+      loadBalancer:
+        servers:
+          - url: http://mailpit:8025
+
+    lvm-minio:
+      loadBalancer:
+        servers:
+          - url: http://minio:9001

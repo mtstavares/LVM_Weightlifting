@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
@@ -31,6 +31,11 @@ export class LocalFileStorageService implements FileStorageService {
 
   getUrl(path: string): string {
     return `/storage/${path.replaceAll('\\', '/')}`;
+  }
+
+  read(path: string): Promise<Buffer> {
+    const root = this.config.get<string>('LOCAL_STORAGE_ROOT', '../../storage');
+    return readFile(join(root, path));
   }
 
   private extensionFor(contentType: string): string {

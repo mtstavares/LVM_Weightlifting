@@ -14,4 +14,5 @@ export interface FileStorageService {
   upload(input: UploadFileInput): Promise<UploadedFile>;
   delete(path: string): Promise<void>;
   getUrl(path: string): string;
+  read(path: string): Promise<Buffer>;
 }
